@@ -2,7 +2,7 @@
 /**
  * Plugin Name: KDCB Chatbot
  * Description: Sitewide floating chat widget with lightweight RAG and a separate defect form flow.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: K&D Hausbau
  * Text Domain: kd-chatbot
  */
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('KDCB_PLUGIN_VERSION', '1.0.0');
+define('KDCB_PLUGIN_VERSION', '1.0.1');
 define('KDCB_PLUGIN_FILE', __FILE__);
 define('KDCB_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('KDCB_PLUGIN_URL', plugin_dir_url(__FILE__));

@@ -7,10 +7,11 @@
   }
 
   var MAX_MESSAGES = Number(cfg.max_messages || 12);
-  var STORAGE_SESSION = 'kdcb_session_id_v1';
-  var STORAGE_MESSAGES = 'kdcb_messages_v1';
-  var STORAGE_DEFECT_DRAFT = 'kdcb_defect_draft_v1';
-  var DEFECT_REQUIRED_FIELDS = ['full_name', 'email', 'object_address', 'trade', 'defect_location', 'defect_description', 'urgency'];
+  var STORAGE_SESSION = 'kdcb_session_id_v2';
+  var STORAGE_MESSAGES = 'kdcb_messages_v2';
+  var STORAGE_DEFECT_DRAFT = 'kdcb_defect_draft_v2';
+  var DEFECT_STEP1_REQUIRED_FIELDS = ['full_name', 'email', 'object_address'];
+  var DEFECT_STEP2_REQUIRED_FIELDS = ['trade', 'defect_location', 'defect_description', 'urgency'];
 
   var state = {
     sessionId: getOrCreateSessionId(),
@@ -121,7 +122,7 @@
     var closeBtn = document.createElement('button');
     closeBtn.className = 'kdcb-close';
     closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Schliessen');
+    closeBtn.setAttribute('aria-label', 'Schließen');
     closeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
     header.appendChild(title);
     header.appendChild(closeBtn);
@@ -371,9 +372,7 @@
 
     var existingForm = defectWrap.querySelector('.kdcb-defect-form');
     if (existingForm) {
-      if (existingForm.elements.page_url_view) {
-        existingForm.elements.page_url_view.value = window.location.href;
-      }
+      syncCallbackPhoneState(existingForm);
       updateDefectSubmitState(existingForm);
       scrollMessagesToBottom(messagesNode);
       return;
@@ -396,28 +395,32 @@
     form.className = 'kdcb-defect-form';
     form.innerHTML =
       '<div class="kdcb-step" data-step="1">' +
+        '<p class="kdcb-step-intro">Bitte geben Sie zuerst Ihre Kontaktdaten und die Objektadresse an.</p>' +
         fieldHtml('Vor- und Nachname*', 'full_name', 'text', true, 120) +
         fieldHtml('E-Mail*', 'email', 'email', true, 120) +
-        fieldHtml('Telefonnummer', 'phone', 'text', false, 80) +
         fieldHtml('Adresse des Bauvorhabens / Objektadresse*', 'object_address', 'text', true, 220) +
         '<div class="kdcb-form-nav"><button class="kdcb-next" type="button">Weiter</button></div>' +
       '</div>' +
       '<div class="kdcb-step" data-step="2" hidden>' +
+        '<p class="kdcb-step-intro">Beschreiben Sie den Mangel möglichst konkret, damit K&D schnell reagieren kann.</p>' +
         selectHtml('Gewerk / Bereich*', 'trade', trades) +
         fieldHtml('Ort des Mangels (Raum/Etage)*', 'defect_location', 'text', true, 120) +
         textareaHtml('Beschreibung des Mangels*', 'defect_description', true, 2000) +
         selectHtml('Dringlichkeit*', 'urgency', urgencies) +
-        '<label class="kdcb-checkbox"><input type="checkbox" name="callback_requested" value="1" /> Rückruf erwünscht</label>' +
-        fieldHtml('Seite/URL, von der gemeldet wurde', 'page_url_view', 'text', false, 500, window.location.href, true) +
+        '<div class="kdcb-callback-card">' +
+          '<label class="kdcb-checkbox"><input type="checkbox" name="callback_requested" value="1" />' +
+            '<span>Rückruf erwünscht</span>' +
+          '</label>' +
+          '<p class="kdcb-callback-hint">Wenn Sie einen Rückruf möchten, benötigen wir eine Telefonnummer.</p>' +
+          '<div class="kdcb-callback-phone" data-callback-phone hidden>' +
+            fieldHtml('Telefonnummer für Rückruf*', 'phone', 'tel', false, 80) +
+          '</div>' +
+        '</div>' +
         '<div class="kdcb-form-nav"><button class="kdcb-prev" type="button">Zurück</button><button class="kdcb-submit" type="submit">Mängelmeldung senden</button></div>' +
       '</div>' +
       '<div class="kdcb-status" aria-live="polite"></div>';
 
     defectWrap.appendChild(form);
-
-    if (form.elements.page_url_view) {
-      form.elements.page_url_view.value = window.location.href;
-    }
 
     if (state.defectDraft) {
       applyDefectDraft(form, state.defectDraft);
@@ -438,8 +441,7 @@
 
     nextBtn.addEventListener('click', function () {
       clearStatus(statusNode);
-      var step1Required = ['full_name', 'email', 'object_address'];
-      var validation = validateFormFields(form, step1Required);
+      var validation = validateFormFields(form, DEFECT_STEP1_REQUIRED_FIELDS);
       if (!validation.ok) {
         setStatus(statusNode, validation.message, true);
         return;
@@ -459,11 +461,19 @@
     });
 
     form.addEventListener('input', function () {
+      syncCallbackPhoneState(form);
       persistDefectDraftFromForm(form);
       updateDefectSubmitState(form);
     });
 
-    form.addEventListener('change', function () {
+    form.addEventListener('change', function (event) {
+      if (
+        event &&
+        event.target &&
+        event.target.name === 'callback_requested'
+      ) {
+        syncCallbackPhoneState(form);
+      }
       persistDefectDraftFromForm(form);
       updateDefectSubmitState(form);
     });
@@ -472,7 +482,8 @@
       event.preventDefault();
       clearStatus(statusNode);
 
-      var validation = validateFormFields(form, DEFECT_REQUIRED_FIELDS);
+      syncCallbackPhoneState(form);
+      var validation = validateFormFields(form, getDefectSubmitRequiredFields(form));
       if (!validation.ok) {
         setStatus(statusNode, validation.message, true);
         return;
@@ -492,6 +503,7 @@
       setDefectStep(form, 1);
     }
 
+    syncCallbackPhoneState(form);
     updateDefectSubmitState(form);
     scrollMessagesToBottom(messagesNode);
   }
@@ -514,6 +526,35 @@
     var toStep = Number(stepNumber) === 2 ? 2 : 1;
     step1.hidden = toStep !== 1;
     step2.hidden = toStep !== 2;
+    form.setAttribute('data-active-step', String(toStep));
+  }
+
+  function getDefectSubmitRequiredFields(form) {
+    var required = DEFECT_STEP1_REQUIRED_FIELDS.concat(DEFECT_STEP2_REQUIRED_FIELDS);
+    if (form.elements.callback_requested && form.elements.callback_requested.checked) {
+      required.push('phone');
+    }
+    return required;
+  }
+
+  function syncCallbackPhoneState(form) {
+    var callbackInput = form.elements.callback_requested;
+    var phoneWrap = form.querySelector('[data-callback-phone]');
+    var phoneInput = form.elements.phone;
+    var callbackEnabled = !!(callbackInput && callbackInput.checked);
+
+    if (phoneWrap) {
+      phoneWrap.hidden = !callbackEnabled;
+    }
+
+    if (phoneInput) {
+      phoneInput.required = callbackEnabled;
+      if (callbackEnabled) {
+        phoneInput.setAttribute('aria-required', 'true');
+      } else {
+        phoneInput.removeAttribute('aria-required');
+      }
+    }
   }
 
   function collectDefectDraft(form) {
@@ -552,12 +593,8 @@
     if (form.elements.callback_requested) {
       form.elements.callback_requested.checked = !!draft.callback_requested;
     }
-
-    if (form.elements.page_url_view) {
-      form.elements.page_url_view.value = window.location.href;
-    }
-
     setDefectStep(form, draft.step);
+    syncCallbackPhoneState(form);
   }
 
   function persistDefectDraftFromForm(form) {
@@ -570,7 +607,7 @@
       return;
     }
 
-    var validation = validateFormFields(form, DEFECT_REQUIRED_FIELDS);
+    var validation = validateFormFields(form, getDefectSubmitRequiredFields(form));
     var descriptionLength = form.elements.defect_description && typeof form.elements.defect_description.value === 'string'
       ? form.elements.defect_description.value.length
       : 0;
@@ -629,6 +666,9 @@
 
       var value = sanitizeText(el.value || '', key === 'defect_description' ? 2000 : 220);
       if (!value) {
+        if (key === 'phone') {
+          return { ok: false, message: 'Bitte geben Sie eine Telefonnummer für den Rückruf an.' };
+        }
         return { ok: false, message: 'Bitte füllen Sie alle Pflichtfelder aus.' };
       }
 
@@ -685,10 +725,8 @@
       addMessage('assistant', 'Vielen Dank. Ihre Mängelmeldung wurde an K&D gesendet.');
       sendStatusPing('[DEFECT_FORM_SUBMITTED]');
       form.reset();
-      if (form.elements.page_url_view) {
-        form.elements.page_url_view.value = window.location.href;
-      }
       setDefectStep(form, 1);
+      syncCallbackPhoneState(form);
       clearDefectDraft();
       if (ui.defectWrap) {
         ui.defectWrap.hidden = true;

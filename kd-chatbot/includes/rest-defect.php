@@ -82,6 +82,14 @@ function kdcb_rest_submit_defect_handler($request)
         return new WP_Error('kdcb_invalid_email', 'E-Mail Adresse ist ungültig.', array('status' => 400));
     }
 
+    if ($callback_requested && $phone === '') {
+        return new WP_Error(
+            'kdcb_missing_phone_for_callback',
+            'Telefonnummer ist erforderlich, wenn Rückruf erwünscht ist.',
+            array('status' => 400)
+        );
+    }
+
     $allowed_trades = kdcb_get_defect_trades();
     if (!in_array($trade, $allowed_trades, true)) {
         return new WP_Error('kdcb_invalid_trade', 'Gewerk/Bereich ist ungültig.', array('status' => 400));
