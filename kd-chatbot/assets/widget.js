@@ -9,10 +9,13 @@
   var MAX_MESSAGES = Number(cfg.max_messages || 12);
   var STORAGE_SESSION = 'kdcb_session_id_v1';
   var STORAGE_MESSAGES = 'kdcb_messages_v1';
+  var STORAGE_DEFECT_DRAFT = 'kdcb_defect_draft_v1';
+  var DEFECT_REQUIRED_FIELDS = ['full_name', 'email', 'object_address', 'trade', 'defect_location', 'defect_description', 'urgency'];
 
   var state = {
     sessionId: getOrCreateSessionId(),
     messages: loadMessages(),
+    defectDraft: loadDefectDraft(),
     waiting: false,
   };
 
@@ -63,6 +66,38 @@
     localStorage.setItem(STORAGE_MESSAGES, JSON.stringify(state.messages));
   }
 
+  function loadDefectDraft() {
+    try {
+      var raw = localStorage.getItem(STORAGE_DEFECT_DRAFT);
+      if (!raw) {
+        return null;
+      }
+
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') {
+        return null;
+      }
+
+      return parsed;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function persistDefectDraft(draft) {
+    if (!draft || typeof draft !== 'object') {
+      return;
+    }
+
+    localStorage.setItem(STORAGE_DEFECT_DRAFT, JSON.stringify(draft));
+    state.defectDraft = draft;
+  }
+
+  function clearDefectDraft() {
+    localStorage.removeItem(STORAGE_DEFECT_DRAFT);
+    state.defectDraft = null;
+  }
+
   function sanitizeText(value, maxLen) {
     var text = String(value || '').replace(/<[^>]*>/g, ' ');
     text = text.replace(/\s+/g, ' ').trim();
@@ -87,7 +122,7 @@
     closeBtn.className = 'kdcb-close';
     closeBtn.type = 'button';
     closeBtn.setAttribute('aria-label', 'Schliessen');
-    closeBtn.textContent = '×';
+    closeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
     header.appendChild(title);
     header.appendChild(closeBtn);
 
@@ -103,11 +138,13 @@
     input.className = 'kdcb-input';
     input.placeholder = (cfg.strings && cfg.strings.placeholder) || 'Ihre Nachricht ...';
     input.maxLength = 1500;
+    input.rows = 1;
 
     var sendBtn = document.createElement('button');
     sendBtn.type = 'button';
     sendBtn.className = 'kdcb-send';
-    sendBtn.textContent = (cfg.strings && cfg.strings.send) || 'Senden';
+    sendBtn.setAttribute('aria-label', (cfg.strings && cfg.strings.send) || 'Senden');
+    sendBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
 
     inputRow.appendChild(input);
     inputRow.appendChild(sendBtn);
@@ -133,7 +170,7 @@
     toggle.type = 'button';
     toggle.className = 'kdcb-toggle';
     toggle.setAttribute('aria-label', (cfg.strings && cfg.strings.toggle_label) || 'K&D Chat');
-    toggle.textContent = 'K&D';
+    toggle.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>';
 
     root.appendChild(panel);
     root.appendChild(toggle);
@@ -145,6 +182,12 @@
         input.focus();
         scrollMessagesToBottom(messages);
       }
+    });
+
+    // Auto-resize textarea
+    input.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = (this.scrollHeight) + 'px';
     });
 
     closeBtn.addEventListener('click', function () {
@@ -248,9 +291,20 @@
     state.waiting = isSending;
     ui.sendBtn.disabled = !!isSending;
     ui.input.disabled = !!isSending;
-    ui.sendBtn.textContent = isSending
-      ? ((cfg.strings && cfg.strings.loading) || 'Antwort wird geladen ...')
-      : ((cfg.strings && cfg.strings.send) || 'Senden');
+    
+    if (isSending) {
+      var typing = document.createElement('div');
+      typing.className = 'kdcb-msg kdcb-msg-assistant kdcb-typing';
+      typing.id = 'kdcb-typing';
+      typing.innerHTML = '<span></span><span></span><span></span>';
+      ui.messages.appendChild(typing);
+      scrollMessagesToBottom(ui.messages);
+    } else {
+      var typing = document.getElementById('kdcb-typing');
+      if (typing) {
+        typing.remove();
+      }
+    }
   }
 
   async function postChat(payload) {
@@ -314,11 +368,29 @@
 
   function renderDefectForm(defectWrap, messagesNode) {
     defectWrap.hidden = false;
+
+    var existingForm = defectWrap.querySelector('.kdcb-defect-form');
+    if (existingForm) {
+      if (existingForm.elements.page_url_view) {
+        existingForm.elements.page_url_view.value = window.location.href;
+      }
+      updateDefectSubmitState(existingForm);
+      scrollMessagesToBottom(messagesNode);
+      return;
+    }
+
     defectWrap.innerHTML = '';
 
     var schema = cfg.defect_schema || {};
     var trades = Array.isArray(schema.trades) && schema.trades.length ? schema.trades : ['Dach', 'Fenster', 'Sanitaer', 'Elektro', 'Fassade', 'Innenausbau', 'Sonstiges'];
     var urgencies = Array.isArray(schema.urgencies) && schema.urgencies.length ? schema.urgencies : ['niedrig', 'mittel', 'hoch'];
+
+    var head = document.createElement('div');
+    head.className = 'kdcb-defect-head';
+    head.innerHTML =
+      '<strong class="kdcb-defect-title">Maengelformular</strong>' +
+      '<button class="kdcb-defect-close" type="button" aria-label="Maengelformular schliessen">×</button>';
+    defectWrap.appendChild(head);
 
     var form = document.createElement('form');
     form.className = 'kdcb-defect-form';
@@ -343,11 +415,26 @@
 
     defectWrap.appendChild(form);
 
+    if (form.elements.page_url_view) {
+      form.elements.page_url_view.value = window.location.href;
+    }
+
+    if (state.defectDraft) {
+      applyDefectDraft(form, state.defectDraft);
+    }
+
     var step1 = form.querySelector('[data-step="1"]');
     var step2 = form.querySelector('[data-step="2"]');
     var statusNode = form.querySelector('.kdcb-status');
     var nextBtn = form.querySelector('.kdcb-next');
     var prevBtn = form.querySelector('.kdcb-prev');
+    var closeBtn = defectWrap.querySelector('.kdcb-defect-close');
+
+    closeBtn.addEventListener('click', function () {
+      persistDefectDraftFromForm(form);
+      defectWrap.hidden = true;
+      clearStatus(statusNode);
+    });
 
     nextBtn.addEventListener('click', function () {
       clearStatus(statusNode);
@@ -358,23 +445,34 @@
         return;
       }
 
-      step1.hidden = true;
-      step2.hidden = false;
+      setDefectStep(form, 2);
+      persistDefectDraftFromForm(form);
+      updateDefectSubmitState(form);
       scrollMessagesToBottom(messagesNode);
     });
 
     prevBtn.addEventListener('click', function () {
       clearStatus(statusNode);
-      step2.hidden = true;
-      step1.hidden = false;
+      setDefectStep(form, 1);
+      persistDefectDraftFromForm(form);
+      updateDefectSubmitState(form);
+    });
+
+    form.addEventListener('input', function () {
+      persistDefectDraftFromForm(form);
+      updateDefectSubmitState(form);
+    });
+
+    form.addEventListener('change', function () {
+      persistDefectDraftFromForm(form);
+      updateDefectSubmitState(form);
     });
 
     form.addEventListener('submit', function (event) {
       event.preventDefault();
       clearStatus(statusNode);
 
-      var required = ['full_name', 'email', 'object_address', 'trade', 'defect_location', 'defect_description', 'urgency'];
-      var validation = validateFormFields(form, required);
+      var validation = validateFormFields(form, DEFECT_REQUIRED_FIELDS);
       if (!validation.ok) {
         setStatus(statusNode, validation.message, true);
         return;
@@ -386,10 +484,100 @@
         return;
       }
 
+      persistDefectDraftFromForm(form);
       submitDefectForm(form, statusNode);
     });
 
+    if (step1 && step2 && !step1.hidden && !step2.hidden) {
+      setDefectStep(form, 1);
+    }
+
+    updateDefectSubmitState(form);
     scrollMessagesToBottom(messagesNode);
+  }
+
+  function getDefectStep(form) {
+    var step1 = form.querySelector('[data-step="1"]');
+    if (step1 && !step1.hidden) {
+      return 1;
+    }
+    return 2;
+  }
+
+  function setDefectStep(form, stepNumber) {
+    var step1 = form.querySelector('[data-step="1"]');
+    var step2 = form.querySelector('[data-step="2"]');
+    if (!step1 || !step2) {
+      return;
+    }
+
+    var toStep = Number(stepNumber) === 2 ? 2 : 1;
+    step1.hidden = toStep !== 1;
+    step2.hidden = toStep !== 2;
+  }
+
+  function collectDefectDraft(form) {
+    var draft = {
+      step: getDefectStep(form),
+      page_url: window.location.href,
+      full_name: sanitizeText(form.elements.full_name ? form.elements.full_name.value : '', 120),
+      email: sanitizeText(form.elements.email ? form.elements.email.value : '', 120),
+      phone: sanitizeText(form.elements.phone ? form.elements.phone.value : '', 80),
+      object_address: sanitizeText(form.elements.object_address ? form.elements.object_address.value : '', 220),
+      trade: sanitizeText(form.elements.trade ? form.elements.trade.value : '', 80),
+      defect_location: sanitizeText(form.elements.defect_location ? form.elements.defect_location.value : '', 120),
+      defect_description: sanitizeText(form.elements.defect_description ? form.elements.defect_description.value : '', 2000),
+      urgency: sanitizeText(form.elements.urgency ? form.elements.urgency.value : '', 20),
+      callback_requested: !!(form.elements.callback_requested && form.elements.callback_requested.checked),
+    };
+
+    return draft;
+  }
+
+  function applyDefectDraft(form, draft) {
+    if (!draft || typeof draft !== 'object') {
+      return;
+    }
+
+    var textFields = ['full_name', 'email', 'phone', 'object_address', 'trade', 'defect_location', 'defect_description', 'urgency'];
+    textFields.forEach(function (field) {
+      if (!form.elements[field]) {
+        return;
+      }
+      if (typeof draft[field] === 'string') {
+        form.elements[field].value = draft[field];
+      }
+    });
+
+    if (form.elements.callback_requested) {
+      form.elements.callback_requested.checked = !!draft.callback_requested;
+    }
+
+    if (form.elements.page_url_view) {
+      form.elements.page_url_view.value = window.location.href;
+    }
+
+    setDefectStep(form, draft.step);
+  }
+
+  function persistDefectDraftFromForm(form) {
+    persistDefectDraft(collectDefectDraft(form));
+  }
+
+  function updateDefectSubmitState(form) {
+    var submitBtn = form.querySelector('.kdcb-submit');
+    if (!submitBtn) {
+      return;
+    }
+
+    var validation = validateFormFields(form, DEFECT_REQUIRED_FIELDS);
+    var descriptionLength = form.elements.defect_description && typeof form.elements.defect_description.value === 'string'
+      ? form.elements.defect_description.value.length
+      : 0;
+    var canSubmit = validation.ok && descriptionLength <= 2000;
+
+    submitBtn.disabled = !canSubmit;
+    submitBtn.setAttribute('aria-disabled', canSubmit ? 'false' : 'true');
   }
 
   function fieldHtml(label, name, type, required, maxLength, value, readonly) {
@@ -457,6 +645,10 @@
 
   async function submitDefectForm(form, statusNode) {
     setStatus(statusNode, 'Maengelmeldung wird gesendet ...', false);
+    var submitBtn = form.querySelector('.kdcb-submit');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+    }
 
     var payload = {
       session_id: state.sessionId,
@@ -493,9 +685,18 @@
       addMessage('assistant', 'Vielen Dank. Ihre Maengelmeldung wurde an K&D gesendet.');
       sendStatusPing('[DEFECT_FORM_SUBMITTED]');
       form.reset();
-      form.elements.page_url_view.value = window.location.href;
+      if (form.elements.page_url_view) {
+        form.elements.page_url_view.value = window.location.href;
+      }
+      setDefectStep(form, 1);
+      clearDefectDraft();
+      if (ui.defectWrap) {
+        ui.defectWrap.hidden = true;
+      }
     } catch (err) {
       setStatus(statusNode, 'Versand fehlgeschlagen. Bitte versuchen Sie es spaeter erneut.', true);
+    } finally {
+      updateDefectSubmitState(form);
     }
   }
 
