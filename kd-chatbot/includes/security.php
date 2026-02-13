@@ -73,7 +73,7 @@ function kdcb_enforce_rate_limit($bucket, $limit, $window_seconds)
     if ($count >= $limit) {
         return new WP_Error(
             'kdcb_rate_limited',
-            'Zu viele Anfragen. Bitte spaeter erneut versuchen.',
+            'Zu viele Anfragen. Bitte später erneut versuchen.',
             array('status' => 429)
         );
     }
@@ -97,7 +97,7 @@ function kdcb_validate_origin($request)
     if (!$origin_host || !$site_host) {
         return new WP_Error(
             'kdcb_origin_invalid',
-            'Origin Header ist ungueltig.',
+            'Origin Header ist ungültig.',
             array('status' => 403)
         );
     }

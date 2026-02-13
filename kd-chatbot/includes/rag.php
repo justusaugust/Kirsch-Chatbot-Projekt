@@ -239,7 +239,7 @@ function kdcb_rag_query_terms($query)
 
     $stopwords = array(
         'der', 'die', 'das', 'und', 'oder', 'aber', 'eine', 'einer', 'einen', 'einem', 'ist', 'sind',
-        'wie', 'was', 'wer', 'wo', 'wann', 'warum', 'wieso', 'kann', 'koennen', 'mit', 'fuer', 'zum', 'zur',
+        'wie', 'was', 'wer', 'wo', 'wann', 'warum', 'wieso', 'kann', 'können', 'mit', 'für', 'zum', 'zur',
         'von', 'bei', 'den', 'dem', 'des', 'ich', 'wir', 'sie', 'ein', 'auf', 'im', 'in', 'am', 'an', 'zu',
     );
 

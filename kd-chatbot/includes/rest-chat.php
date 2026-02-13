@@ -33,7 +33,7 @@ function kdcb_rest_config_handler()
             'title' => 'K&D Hausbau Chat',
             'placeholder' => 'Ihre Nachricht ...',
             'send' => 'Senden',
-            'open_defect' => 'Maengel melden',
+            'open_defect' => 'Mängel melden',
         ),
         'defect_schema' => array(
             'trades' => kdcb_get_defect_trades(),
@@ -77,20 +77,20 @@ function kdcb_chat_is_status_ping($message)
 function kdcb_chat_status_reply($message)
 {
     if (trim((string) $message) === '[DEFECT_FORM_SUBMITTED]') {
-        return 'Vielen Dank. Ihre Maengelmeldung wurde uebermittelt. Unser Team meldet sich zeitnah.';
+        return 'Vielen Dank. Ihre Mängelmeldung wurde übermittelt. Unser Team meldet sich zeitnah.';
     }
 
-    return 'Bitte fuellen Sie das Maengelformular aus. Es wird direkt an K&D weitergeleitet.';
+    return 'Bitte füllen Sie das Mängelformular aus. Es wird direkt an K&D weitergeleitet.';
 }
 
 function kdcb_chat_behavior_pack()
 {
     $lines = array(
-        '- Intent zuerst klaeren: Kauf/Miete, Leistungen, Projekt/Objekt, FAQ, Kontakt oder Maengel.',
-        '- Fuer konkrete Daten, Preise, Flaechen, Adressen nur belastbare Werte aus dem Kontext nennen.',
-        '- Bei Ueberblicksfragen erst die Kernpunkte nennen, dann kurze Details.',
-        '- Wenn Kontext fehlt: transparent sagen, was fehlt, und Maengelformular als Kontaktweg anbieten.',
-        '- Keine Spekulation, keine Rechts- oder Finanzberatung ueber den Kontext hinaus.',
+        '- Intent zuerst klären: Kauf/Miete, Leistungen, Projekt/Objekt, FAQ, Kontakt oder Mängel.',
+        '- Für konkrete Daten, Preise, Flächen, Adressen nur belastbare Werte aus dem Kontext nennen.',
+        '- Bei Überblicksfragen erst die Kernpunkte nennen, dann kurze Details.',
+        '- Wenn Kontext fehlt: transparent sagen, was fehlt, und Mängelformular als Kontaktweg anbieten.',
+        '- Keine Spekulation, keine Rechts- oder Finanzberatung über den Kontext hinaus.',
     );
 
     return implode("\n", $lines);
@@ -123,14 +123,14 @@ function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw)
         $admin_system,
         'Du bist der Website-Assistent von K&D Hausbau.',
         'Nutze strikt nur den bereitgestellten Kontext und erfinde keine Fakten.',
-        'Kontext-Prioritaet: 1) CURRENT_PAGE (hoch), 2) WP_SEARCH (mittel), 3) FAQ_MATCHES (niedrig).',
-        'Wenn nach einem Ueberblick (z. B. "Leistungen") gefragt wird, kombiniere CURRENT_PAGE mit relevanten WP_SEARCH-Treffern.',
-        'Wenn Informationen fehlen oder uneindeutig sind, sage das klar und verweise auf das Maengelformular als Kontaktweg.',
-        'Sicherheitsregel: Frage nicht aktiv nach sensiblen persoenlichen Daten.',
+        'Kontext-Priorität: 1) CURRENT_PAGE (hoch), 2) WP_SEARCH (mittel), 3) FAQ_MATCHES (niedrig).',
+        'Wenn nach einem Überblick (z. B. "Leistungen") gefragt wird, kombiniere CURRENT_PAGE mit relevanten WP_SEARCH-Treffern.',
+        'Wenn Informationen fehlen oder uneindeutig sind, sage das klar und verweise auf das Mängelformular als Kontaktweg.',
+        'Sicherheitsregel: Frage nicht aktiv nach sensiblen persönlichen Daten.',
         "Antwort-Playbook (kompakt):\n" . kdcb_chat_behavior_pack(),
         'Antwortsprache: Deutsch. Stil: klar, kurz, hilfreich.',
-        'Antwortformat: zuerst eine direkte Antwort in 2-6 Saetzen, optional kurze Aufzaehlung fuer Details.',
-        'Nenne am Ende nur tatsaechlich genutzte Quellen als "Quelle: <url>" (eine Zeile, mehrere URLs mit Komma).',
+        'Antwortformat: zuerst eine direkte Antwort in 2-6 Sätzen, optional kurze Aufzählung für Details.',
+        'Nenne am Ende nur tatsächlich genutzte Quellen als "Quelle: <url>" (eine Zeile, mehrere URLs mit Komma).',
     );
 
     if ($context_pack !== '') {
@@ -148,7 +148,7 @@ function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw)
     if ($context_text !== '') {
         $rules[] = "Kontext (verbindlich):\n" . $context_text;
     } else {
-        $rules[] = 'Es liegt kein belastbarer Kontext vor. Antworte in diesem Fall transparent und verweise auf Kontakt per Maengelformular.';
+        $rules[] = 'Es liegt kein belastbarer Kontext vor. Antworte in diesem Fall transparent und verweise auf Kontakt per Mängelformular.';
     }
 
     return implode("\n\n", $rules);
@@ -169,7 +169,7 @@ function kdcb_rest_chat_handler($request)
 
     $payload = $request->get_json_params();
     if (!is_array($payload)) {
-        return new WP_Error('kdcb_invalid_payload', 'Ungueltige JSON-Daten.', array('status' => 400));
+        return new WP_Error('kdcb_invalid_payload', 'Ungültige JSON-Daten.', array('status' => 400));
     }
 
     $payload_encoded = wp_json_encode($payload);
@@ -206,7 +206,7 @@ function kdcb_rest_chat_handler($request)
 
         if (
             $role === 'assistant' &&
-            $content === 'Ich kann gerade keine zuverlaessige Antwort erzeugen. Bitte nutzen Sie das Maengelformular oder kontaktieren Sie K&D direkt.'
+            $content === 'Ich kann gerade keine zuverlässige Antwort erzeugen. Bitte nutzen Sie das Mängelformular oder kontaktieren Sie K&D direkt.'
         ) {
             continue;
         }
@@ -222,7 +222,7 @@ function kdcb_rest_chat_handler($request)
     }
 
     if ($latest_user_message === '') {
-        return new WP_Error('kdcb_missing_user_message', 'Keine gueltige User-Nachricht gefunden.', array('status' => 400));
+        return new WP_Error('kdcb_missing_user_message', 'Keine gültige User-Nachricht gefunden.', array('status' => 400));
     }
 
     $page_url = isset($payload['page_url']) ? esc_url_raw((string) $payload['page_url']) : '';
@@ -238,7 +238,7 @@ function kdcb_rest_chat_handler($request)
 
     if (kdcb_chat_should_show_defect_form($latest_user_message, $payload)) {
         return new WP_REST_Response(array(
-            'reply' => 'Ich habe das Maengelformular fuer Sie geoeffnet. Bitte tragen Sie die Angaben ein, damit K&D direkt reagieren kann.',
+            'reply' => 'Ich habe das Mängelformular für Sie geöffnet. Bitte tragen Sie die Angaben ein, damit K&D direkt reagieren kann.',
             'sources' => array(),
             'action' => array('type' => 'show_defect_form'),
         ), 200);
@@ -263,7 +263,7 @@ function kdcb_rest_chat_handler($request)
 
     if (is_wp_error($reply)) {
         error_log('KDCB chat generation failed: ' . $reply->get_error_code());
-        $reply = 'Ich kann gerade keine zuverlaessige Antwort erzeugen. Bitte nutzen Sie das Maengelformular oder kontaktieren Sie K&D direkt.';
+        $reply = 'Ich kann gerade keine zuverlässige Antwort erzeugen. Bitte nutzen Sie das Mängelformular oder kontaktieren Sie K&D direkt.';
     }
 
     return new WP_REST_Response(array(

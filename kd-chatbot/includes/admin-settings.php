@@ -113,7 +113,7 @@ function kdcb_sanitize_defect_email($value)
 {
     $email = sanitize_email((string) $value);
     if ($email === '' || !is_email($email)) {
-        add_settings_error('kdcb_messages', 'kdcb_email_invalid', 'Bitte geben Sie eine gueltige Empfaenger-E-Mail ein.', 'error');
+        add_settings_error('kdcb_messages', 'kdcb_email_invalid', 'Bitte geben Sie eine gültige Empfänger-E-Mail ein.', 'error');
         return get_option('admin_email');
     }
 
@@ -178,7 +178,7 @@ function kdcb_render_settings_page()
     ?>
     <div class="wrap">
         <h1>KDCB Chatbot</h1>
-        <p>Konfiguration fuer Chat-Widget, OpenAI Anbindung und Maengelformular.</p>
+        <p>Konfiguration für Chat-Widget, OpenAI Anbindung und Mängelformular.</p>
 
         <form method="post" action="options.php">
             <?php settings_fields('kdcb_settings_group'); ?>
@@ -194,14 +194,14 @@ function kdcb_render_settings_page()
                     <th scope="row"><label for="kdcb_widget_mode">Widget Modus</label></th>
                     <td>
                         <input type="text" id="kdcb_widget_mode" value="Floating (v1)" class="regular-text" readonly />
-                        <p class="description">In Version 1 ist nur der schwebende Modus verfuegbar.</p>
+                        <p class="description">In Version 1 ist nur der schwebende Modus verfügbar.</p>
                     </td>
                 </tr>
                 <tr>
                     <th scope="row"><label for="kdcb_openai_api_key">OpenAI API Key</label></th>
                     <td>
                         <input type="password" id="kdcb_openai_api_key" name="kdcb_openai_api_key" value="<?php echo esc_attr($api_key); ?>" class="regular-text" autocomplete="off" />
-                        <p class="description">Wird nur in WordPress Optionen gespeichert und serverseitig fuer Responses API genutzt.</p>
+                        <p class="description">Wird nur in WordPress Optionen gespeichert und serverseitig für Responses API genutzt.</p>
                     </td>
                 </tr>
                 <tr>
@@ -221,7 +221,7 @@ function kdcb_render_settings_page()
                     <th scope="row"><label for="kdcb_context_pack">Komprimierter Kontext (immer aktiv)</label></th>
                     <td>
                         <textarea id="kdcb_context_pack" name="kdcb_context_pack" rows="8" class="large-text code"><?php echo esc_textarea($context_pack); ?></textarea>
-                        <p class="description">Kurzer Wissensblock fuer FAQ-Kernaussagen, Terminologie und Antwortstil. Wird bei jeder Chatanfrage als kompakter Kontext mitgegeben.</p>
+                        <p class="description">Kurzer Wissensblock für FAQ-Kernaussagen, Terminologie und Antwortstil. Wird bei jeder Chatanfrage als kompakter Kontext mitgegeben.</p>
                     </td>
                 </tr>
                 <tr>
@@ -232,7 +232,7 @@ function kdcb_render_settings_page()
                     </td>
                 </tr>
                 <tr>
-                    <th scope="row"><label for="kdcb_defect_email_to">Empfaenger E-Mail fuer Maengel</label></th>
+                    <th scope="row"><label for="kdcb_defect_email_to">Empfänger E-Mail für Mängel</label></th>
                     <td>
                         <input type="email" id="kdcb_defect_email_to" name="kdcb_defect_email_to" value="<?php echo esc_attr($defect_email_to); ?>" class="regular-text" />
                     </td>

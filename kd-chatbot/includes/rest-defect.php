@@ -44,7 +44,7 @@ function kdcb_rest_submit_defect_handler($request)
 
     $payload = $request->get_json_params();
     if (!is_array($payload)) {
-        return new WP_Error('kdcb_invalid_payload', 'Ungueltige JSON-Daten.', array('status' => 400));
+        return new WP_Error('kdcb_invalid_payload', 'Ungültige JSON-Daten.', array('status' => 400));
     }
 
     $payload_encoded = wp_json_encode($payload);
@@ -79,17 +79,17 @@ function kdcb_rest_submit_defect_handler($request)
     }
 
     if (!is_email($email)) {
-        return new WP_Error('kdcb_invalid_email', 'E-Mail Adresse ist ungueltig.', array('status' => 400));
+        return new WP_Error('kdcb_invalid_email', 'E-Mail Adresse ist ungültig.', array('status' => 400));
     }
 
     $allowed_trades = kdcb_get_defect_trades();
     if (!in_array($trade, $allowed_trades, true)) {
-        return new WP_Error('kdcb_invalid_trade', 'Gewerk/Bereich ist ungueltig.', array('status' => 400));
+        return new WP_Error('kdcb_invalid_trade', 'Gewerk/Bereich ist ungültig.', array('status' => 400));
     }
 
     $allowed_urgencies = kdcb_get_defect_urgencies();
     if (!in_array($urgency, $allowed_urgencies, true)) {
-        return new WP_Error('kdcb_invalid_urgency', 'Dringlichkeit ist ungueltig.', array('status' => 400));
+        return new WP_Error('kdcb_invalid_urgency', 'Dringlichkeit ist ungültig.', array('status' => 400));
     }
 
     $recipient = kdcb_get_option('defect_email_to', get_option('admin_email'));
@@ -97,10 +97,10 @@ function kdcb_rest_submit_defect_handler($request)
         $recipient = get_option('admin_email');
     }
 
-    $subject = sprintf('Maengelmeldung von %s | %s', $full_name, $object_address);
+    $subject = sprintf('Mängelmeldung von %s | %s', $full_name, $object_address);
 
     $body_lines = array(
-        'Neue Maengelmeldung',
+        'Neue Mängelmeldung',
         '===================',
         'Zeitpunkt: ' . current_time('mysql'),
         'Session-ID: ' . $session_id,
@@ -112,7 +112,7 @@ function kdcb_rest_submit_defect_handler($request)
         'Gewerk/Bereich: ' . $trade,
         'Ort des Mangels: ' . $defect_location,
         'Dringlichkeit: ' . $urgency,
-        'Rueckruf erwuenscht: ' . ($callback_requested ? 'Ja' : 'Nein'),
+        'Rückruf erwünscht: ' . ($callback_requested ? 'Ja' : 'Nein'),
         'Gemeldet von URL: ' . ($page_url !== '' ? $page_url : '-'),
         '',
         'Beschreibung des Mangels:',

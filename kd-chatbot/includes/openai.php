@@ -80,7 +80,7 @@ function kdcb_openai_create_response($messages)
     );
 
     if (empty($payload['input'])) {
-        return new WP_Error('kdcb_openai_invalid_input', 'Keine gueltigen Nachrichten fuer OpenAI.');
+        return new WP_Error('kdcb_openai_invalid_input', 'Keine gültigen Nachrichten für OpenAI.');
     }
 
     $response = wp_remote_post('https://api.openai.com/v1/responses', array(

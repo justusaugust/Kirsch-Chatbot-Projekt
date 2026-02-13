@@ -152,7 +152,7 @@
     var defectBtn = document.createElement('button');
     defectBtn.type = 'button';
     defectBtn.className = 'kdcb-defect-open';
-    defectBtn.textContent = (cfg.strings && cfg.strings.open_defect) || 'Maengel melden';
+    defectBtn.textContent = (cfg.strings && cfg.strings.open_defect) || 'Mängel melden';
 
     actions.appendChild(inputRow);
     actions.appendChild(defectBtn);
@@ -382,14 +382,14 @@
     defectWrap.innerHTML = '';
 
     var schema = cfg.defect_schema || {};
-    var trades = Array.isArray(schema.trades) && schema.trades.length ? schema.trades : ['Dach', 'Fenster', 'Sanitaer', 'Elektro', 'Fassade', 'Innenausbau', 'Sonstiges'];
+    var trades = Array.isArray(schema.trades) && schema.trades.length ? schema.trades : ['Dach', 'Fenster', 'Sanitär', 'Elektro', 'Fassade', 'Innenausbau', 'Sonstiges'];
     var urgencies = Array.isArray(schema.urgencies) && schema.urgencies.length ? schema.urgencies : ['niedrig', 'mittel', 'hoch'];
 
     var head = document.createElement('div');
     head.className = 'kdcb-defect-head';
     head.innerHTML =
-      '<strong class="kdcb-defect-title">Maengelformular</strong>' +
-      '<button class="kdcb-defect-close" type="button" aria-label="Maengelformular schliessen">×</button>';
+      '<strong class="kdcb-defect-title">Mängelformular</strong>' +
+      '<button class="kdcb-defect-close" type="button" aria-label="Mängelformular schließen">×</button>';
     defectWrap.appendChild(head);
 
     var form = document.createElement('form');
@@ -407,9 +407,9 @@
         fieldHtml('Ort des Mangels (Raum/Etage)*', 'defect_location', 'text', true, 120) +
         textareaHtml('Beschreibung des Mangels*', 'defect_description', true, 2000) +
         selectHtml('Dringlichkeit*', 'urgency', urgencies) +
-        '<label class="kdcb-checkbox"><input type="checkbox" name="callback_requested" value="1" /> Rueckruf erwuenscht</label>' +
+        '<label class="kdcb-checkbox"><input type="checkbox" name="callback_requested" value="1" /> Rückruf erwünscht</label>' +
         fieldHtml('Seite/URL, von der gemeldet wurde', 'page_url_view', 'text', false, 500, window.location.href, true) +
-        '<div class="kdcb-form-nav"><button class="kdcb-prev" type="button">Zurueck</button><button class="kdcb-submit" type="submit">Maengelmeldung senden</button></div>' +
+        '<div class="kdcb-form-nav"><button class="kdcb-prev" type="button">Zurück</button><button class="kdcb-submit" type="submit">Mängelmeldung senden</button></div>' +
       '</div>' +
       '<div class="kdcb-status" aria-live="polite"></div>';
 
@@ -608,7 +608,7 @@
 
   function selectHtml(label, name, options) {
     var html = '<div class="kdcb-field"><label>' + label + '</label><select name="' + name + '" required>';
-    html += '<option value="">Bitte waehlen</option>';
+    html += '<option value="">Bitte wählen</option>';
 
     options.forEach(function (option) {
       var safe = String(option).replace(/"/g, '&quot;');
@@ -629,13 +629,13 @@
 
       var value = sanitizeText(el.value || '', key === 'defect_description' ? 2000 : 220);
       if (!value) {
-        return { ok: false, message: 'Bitte fuellen Sie alle Pflichtfelder aus.' };
+        return { ok: false, message: 'Bitte füllen Sie alle Pflichtfelder aus.' };
       }
 
       if (key === 'email') {
         var isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
         if (!isValidEmail) {
-          return { ok: false, message: 'Bitte geben Sie eine gueltige E-Mail ein.' };
+          return { ok: false, message: 'Bitte geben Sie eine gültige E-Mail ein.' };
         }
       }
     }
@@ -644,7 +644,7 @@
   }
 
   async function submitDefectForm(form, statusNode) {
-    setStatus(statusNode, 'Maengelmeldung wird gesendet ...', false);
+    setStatus(statusNode, 'Mängelmeldung wird gesendet ...', false);
     var submitBtn = form.querySelector('.kdcb-submit');
     if (submitBtn) {
       submitBtn.disabled = true;
@@ -681,8 +681,8 @@
         throw new Error('defect_invalid_response');
       }
 
-      setStatus(statusNode, 'Vielen Dank. Ihre Maengelmeldung wurde versendet.', false, true);
-      addMessage('assistant', 'Vielen Dank. Ihre Maengelmeldung wurde an K&D gesendet.');
+      setStatus(statusNode, 'Vielen Dank. Ihre Mängelmeldung wurde versendet.', false, true);
+      addMessage('assistant', 'Vielen Dank. Ihre Mängelmeldung wurde an K&D gesendet.');
       sendStatusPing('[DEFECT_FORM_SUBMITTED]');
       form.reset();
       if (form.elements.page_url_view) {
@@ -694,7 +694,7 @@
         ui.defectWrap.hidden = true;
       }
     } catch (err) {
-      setStatus(statusNode, 'Versand fehlgeschlagen. Bitte versuchen Sie es spaeter erneut.', true);
+      setStatus(statusNode, 'Versand fehlgeschlagen. Bitte versuchen Sie es später erneut.', true);
     } finally {
       updateDefectSubmitState(form);
     }
