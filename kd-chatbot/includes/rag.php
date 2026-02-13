@@ -16,6 +16,74 @@ function kdcb_rag_clean_text($text, $max_len)
     return $text;
 }
 
+function kdcb_rag_count_term_hits($text, $terms)
+{
+    if (!is_array($terms) || empty($terms)) {
+        return 0;
+    }
+
+    $haystack = kdcb_text_lower((string) $text);
+    $hits = 0;
+
+    foreach ($terms as $term) {
+        if ($term === '') {
+            continue;
+        }
+        if (strpos($haystack, kdcb_text_lower($term)) !== false) {
+            $hits++;
+        }
+    }
+
+    return $hits;
+}
+
+function kdcb_rag_make_focus_snippet($text, $terms, $max_len)
+{
+    $text = kdcb_rag_clean_text($text, 4000);
+    if ($text === '') {
+        return '';
+    }
+
+    if (!is_array($terms) || empty($terms)) {
+        return kdcb_text_substr($text, $max_len);
+    }
+
+    $sentences = preg_split('/(?<=[\.\!\?])\s+/u', $text);
+    if (!is_array($sentences) || empty($sentences)) {
+        return kdcb_text_substr($text, $max_len);
+    }
+
+    $picked = array();
+    foreach ($sentences as $sentence) {
+        $sentence = trim((string) $sentence);
+        if ($sentence === '') {
+            continue;
+        }
+
+        if (kdcb_rag_count_term_hits($sentence, $terms) > 0) {
+            $picked[] = $sentence;
+        }
+
+        if (strlen(implode(' ', $picked)) >= $max_len) {
+            break;
+        }
+    }
+
+    if (empty($picked)) {
+        return kdcb_text_substr($text, $max_len);
+    }
+
+    $candidate = implode(' ', $picked);
+
+    // If keyword matches are sparse, blend in leading context to keep broad coverage.
+    if (strlen($candidate) < (int) ($max_len * 0.65)) {
+        $leading = kdcb_text_substr($text, $max_len);
+        $candidate = trim($candidate . ' ' . $leading);
+    }
+
+    return kdcb_text_substr($candidate, $max_len);
+}
+
 function kdcb_rag_resolve_page($page_url)
 {
     $page_url = esc_url_raw((string) $page_url);
@@ -186,6 +254,65 @@ function kdcb_rag_query_terms($query)
     return array_keys($terms);
 }
 
+function kdcb_rag_build_search_query($latest_message, $query_terms, $current_page)
+{
+    $compact_terms = array();
+
+    if (is_array($query_terms) && !empty($query_terms)) {
+        $compact_terms = array_slice($query_terms, 0, 5);
+    }
+
+    // For section-overview questions, the page title is often the strongest signal.
+    if (is_array($current_page) && !empty($current_page['title'])) {
+        $title_term = kdcb_text_lower(kdcb_rag_clean_text($current_page['title'], 60));
+        if ($title_term !== '' && !in_array($title_term, $compact_terms, true)) {
+            if (strpos(kdcb_text_lower((string) $latest_message), $title_term) !== false) {
+                array_unshift($compact_terms, $title_term);
+            }
+        }
+    }
+
+    $compact_terms = array_values(array_unique(array_filter($compact_terms)));
+    if (!empty($compact_terms)) {
+        return implode(' ', array_slice($compact_terms, 0, 5));
+    }
+
+    return kdcb_rag_clean_text($latest_message, 120);
+}
+
+function kdcb_rag_merge_search_results($primary_results, $fallback_results, $max_results)
+{
+    $all = array_merge(
+        is_array($primary_results) ? $primary_results : array(),
+        is_array($fallback_results) ? $fallback_results : array()
+    );
+
+    if (empty($all)) {
+        return array();
+    }
+
+    $by_url = array();
+    foreach ($all as $item) {
+        if (empty($item['url'])) {
+            continue;
+        }
+        $by_url[$item['url']] = $item;
+    }
+
+    $deduped = array_values($by_url);
+    usort($deduped, function ($a, $b) {
+        $a_hits = isset($a['term_hits']) ? (int) $a['term_hits'] : 0;
+        $b_hits = isset($b['term_hits']) ? (int) $b['term_hits'] : 0;
+        if ($a_hits === $b_hits) {
+            return 0;
+        }
+
+        return ($a_hits > $b_hits) ? -1 : 1;
+    });
+
+    return array_slice($deduped, 0, $max_results);
+}
+
 function kdcb_rag_match_faq($query, $faq_raw, $max_results)
 {
     $pairs = kdcb_rag_parse_faq($faq_raw);
@@ -239,7 +366,10 @@ function kdcb_rag_match_faq($query, $faq_raw, $max_results)
 
 function kdcb_rag_build_context($page_url, $latest_message, $faq_raw)
 {
+    $query_terms = kdcb_rag_query_terms($latest_message);
     $context = array(
+        'latest_message' => kdcb_rag_clean_text($latest_message, 220),
+        'query_terms' => $query_terms,
         'current_page' => null,
         'search_results' => array(),
         'faq_results' => array(),
@@ -248,6 +378,7 @@ function kdcb_rag_build_context($page_url, $latest_message, $faq_raw)
 
     $current_page = kdcb_rag_resolve_page($page_url);
     if (is_array($current_page)) {
+        $current_page['focus_snippet'] = kdcb_rag_make_focus_snippet($current_page['content'], $query_terms, 900);
         $context['current_page'] = $current_page;
         $context['sources'][] = array(
             'title' => $current_page['title'],
@@ -256,7 +387,30 @@ function kdcb_rag_build_context($page_url, $latest_message, $faq_raw)
     }
 
     $exclude_post_id = is_array($current_page) ? (int) $current_page['post_id'] : 0;
-    $search_results = kdcb_rag_search_posts($latest_message, $exclude_post_id);
+    $search_query = kdcb_rag_build_search_query($latest_message, $query_terms, $current_page);
+    $search_results = kdcb_rag_search_posts($search_query, $exclude_post_id);
+
+    $fallback_search_results = array();
+    if (count($search_results) < 3 && is_array($current_page) && !empty($current_page['title'])) {
+        $fallback_search_results = kdcb_rag_search_posts($current_page['title'], $exclude_post_id);
+    }
+
+    $search_results = kdcb_rag_merge_search_results($search_results, $fallback_search_results, 3);
+
+    foreach ($search_results as &$item) {
+        $item['term_hits'] = kdcb_rag_count_term_hits($item['title'] . ' ' . $item['snippet'], $query_terms);
+    }
+    unset($item);
+
+    usort($search_results, function ($a, $b) {
+        $a_hits = isset($a['term_hits']) ? (int) $a['term_hits'] : 0;
+        $b_hits = isset($b['term_hits']) ? (int) $b['term_hits'] : 0;
+        if ($a_hits === $b_hits) {
+            return 0;
+        }
+
+        return ($a_hits > $b_hits) ? -1 : 1;
+    });
     $context['search_results'] = $search_results;
 
     foreach ($search_results as $result) {
@@ -301,17 +455,26 @@ function kdcb_rag_context_to_text($context)
 {
     $chunks = array();
 
+    if (!empty($context['latest_message'])) {
+        $chunks[] = "[USER_QUESTION]\n" . $context['latest_message'];
+    }
+
+    if (!empty($context['query_terms'])) {
+        $chunks[] = "[KEY_TERMS]\n" . implode(', ', $context['query_terms']);
+    }
+
     if (!empty($context['current_page'])) {
         $page = $context['current_page'];
-        $chunks[] = "[Current Page]\nTitel: " . $page['title'] . "\nURL: " . $page['url'] . "\nInhalt: " . $page['content'];
+        $page_excerpt = !empty($page['focus_snippet']) ? $page['focus_snippet'] : $page['content'];
+        $chunks[] = "[CURRENT_PAGE | PRIORITY: HIGH]\nTitel: " . $page['title'] . "\nURL: " . $page['url'] . "\nRelevanter Auszug: " . $page_excerpt;
     }
 
     if (!empty($context['search_results'])) {
         $search_chunks = array();
         foreach ($context['search_results'] as $item) {
-            $search_chunks[] = "- " . $item['title'] . "\n  URL: " . $item['url'] . "\n  Snippet: " . $item['snippet'];
+            $search_chunks[] = "- " . $item['title'] . "\n  URL: " . $item['url'] . "\n  Treffer: " . (isset($item['term_hits']) ? (int) $item['term_hits'] : 0) . "\n  Snippet: " . $item['snippet'];
         }
-        $chunks[] = "[WordPress Search]\n" . implode("\n", $search_chunks);
+        $chunks[] = "[WP_SEARCH | PRIORITY: MEDIUM]\n" . implode("\n", $search_chunks);
     }
 
     if (!empty($context['faq_results'])) {
@@ -319,7 +482,7 @@ function kdcb_rag_context_to_text($context)
         foreach ($context['faq_results'] as $faq) {
             $faq_chunks[] = "Q: " . $faq['question'] . "\nA: " . $faq['answer'];
         }
-        $chunks[] = "[FAQ]\n" . implode("\n\n", $faq_chunks);
+        $chunks[] = "[FAQ_MATCHES | PRIORITY: LOW]\n" . implode("\n\n", $faq_chunks);
     }
 
     return implode("\n\n", $chunks);

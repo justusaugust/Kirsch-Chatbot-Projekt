@@ -89,10 +89,15 @@ function kdcb_chat_build_system_prompt($context_text, $page_title)
 
     $rules = array(
         $admin_system,
-        'Sicherheitsregel: Frage nicht nach sensiblen persoenlichen Daten und bleibe beim Thema K&D Hausbau und Website-Inhalten.',
-        'Nutze nur den bereitgestellten Kontext. Wenn Informationen fehlen, antworte ehrlich und schlage das Maengelformular als Kontaktweg vor.',
-        'Antwort auf Deutsch, knapp und hilfreich.',
-        'Wenn Quellen genutzt wurden, fuehre am Ende eine kurze Quellenzeile im Format "Quelle: <url>" auf.',
+        'Du bist der Website-Assistent von K&D Hausbau.',
+        'Nutze strikt nur den bereitgestellten Kontext und erfinde keine Fakten.',
+        'Kontext-Prioritaet: 1) CURRENT_PAGE (hoch), 2) WP_SEARCH (mittel), 3) FAQ_MATCHES (niedrig).',
+        'Wenn nach einem Ueberblick (z. B. "Leistungen") gefragt wird, kombiniere CURRENT_PAGE mit relevanten WP_SEARCH-Treffern.',
+        'Wenn Informationen fehlen oder uneindeutig sind, sage das klar und verweise auf das Maengelformular als Kontaktweg.',
+        'Sicherheitsregel: Frage nicht aktiv nach sensiblen persoenlichen Daten.',
+        'Antwortsprache: Deutsch. Stil: klar, kurz, hilfreich.',
+        'Antwortformat: zuerst eine direkte Antwort in 2-6 Saetzen, optional kurze Aufzaehlung fuer Details.',
+        'Nenne am Ende nur tatsaechlich genutzte Quellen als "Quelle: <url>" (eine Zeile, mehrere URLs mit Komma).',
     );
 
     if ($page_title !== '') {
@@ -100,7 +105,9 @@ function kdcb_chat_build_system_prompt($context_text, $page_title)
     }
 
     if ($context_text !== '') {
-        $rules[] = "Kontext:\n" . $context_text;
+        $rules[] = "Kontext (verbindlich):\n" . $context_text;
+    } else {
+        $rules[] = 'Es liegt kein belastbarer Kontext vor. Antworte in diesem Fall transparent und verweise auf Kontakt per Maengelformular.';
     }
 
     return implode("\n\n", $rules);
@@ -153,6 +160,13 @@ function kdcb_rest_chat_handler($request)
         $content = kdcb_sanitize_message_text(isset($message['content']) ? $message['content'] : '', $max_len);
 
         if ($content === '') {
+            continue;
+        }
+
+        if (
+            $role === 'assistant' &&
+            $content === 'Ich kann gerade keine zuverlaessige Antwort erzeugen. Bitte nutzen Sie das Maengelformular oder kontaktieren Sie K&D direkt.'
+        ) {
             continue;
         }
 
