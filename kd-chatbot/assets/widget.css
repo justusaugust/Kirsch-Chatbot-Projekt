@@ -458,6 +458,10 @@
   gap: 10px;
 }
 
+.kdcb-step[hidden] {
+  display: none !important;
+}
+
 .kdcb-step-intro {
   margin: 0 0 4px;
   font-size: 0.81rem;

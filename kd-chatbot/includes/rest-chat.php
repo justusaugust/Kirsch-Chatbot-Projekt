@@ -121,18 +121,21 @@ function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw)
 
     $rules = array(
         $admin_system,
-        'Du bist der Website-Assistent von K&D Hausbau.',
+        'Du bist der Assistent dieser Website.',
         'Nutze strikt nur den bereitgestellten Kontext und erfinde keine Fakten.',
         'Kontext-Priorität: 1) CURRENT_PAGE (hoch), 2) WP_SEARCH (mittel), 3) FAQ_MATCHES (niedrig).',
         'Semantik-Regel: Behandle umgangssprachliche Begriffe (z. B. "Boss") als mögliche Anfrage nach Geschäftsführung/Leitung.',
         'Wenn nach einem Überblick (z. B. "Leistungen") gefragt wird, kombiniere CURRENT_PAGE mit relevanten WP_SEARCH-Treffern.',
         'Wenn Informationen fehlen oder uneindeutig sind, sage das klar und verweise auf das Mängelformular als Kontaktweg.',
         'Sicherheitsregel: Frage nicht aktiv nach sensiblen persönlichen Daten.',
+        'Schreibstil: antworte direkt auf die Frage ohne Meta-Einleitung wie "Auf der Seite ... steht".',
+        'Nenne den Website-/Firmennamen nur, wenn es für die inhaltliche Klarheit nötig ist.',
+        'Nenne Seitennamen/Fundorte nicht im Fließtext, außer der Nutzer fragt explizit danach.',
         "Antwort-Playbook (kompakt):\n" . kdcb_chat_behavior_pack(),
         'Antwortsprache: Deutsch. Stil: klar, kurz, hilfreich.',
         'Antwortformat: zuerst eine direkte Antwort in 2-6 Sätzen, optional kurze Aufzählung für Details.',
         'Nutze lesbares Markdown für Struktur (Absätze, Listen, **Hervorhebungen**), aber keine Tabellen.',
-        'Nenne am Ende nur tatsächlich genutzte Quellen als "Quelle: <url>" (eine Zeile, mehrere URLs mit Komma).',
+        'Keine Quellen-/Fundstellen-Zeile am Ende, außer der Nutzer fragt explizit nach Quelle/Beleg/Link.',
     );
 
     if ($context_pack !== '') {
@@ -154,6 +157,44 @@ function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw)
     }
 
     return implode("\n\n", $rules);
+}
+
+function kdcb_chat_user_asked_for_source($latest_user_message)
+{
+    $message = kdcb_text_lower((string) $latest_user_message);
+    $keywords = array(
+        'quelle',
+        'beleg',
+        'woher',
+        'link',
+        'fundstelle',
+        'source',
+        'herkunft',
+    );
+
+    foreach ($keywords as $keyword) {
+        if (strpos($message, $keyword) !== false) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function kdcb_chat_postprocess_reply($reply, $latest_user_message)
+{
+    $reply = trim((string) $reply);
+    if ($reply === '') {
+        return '';
+    }
+
+    if (!kdcb_chat_user_asked_for_source($latest_user_message)) {
+        $reply = preg_replace('/(^|\R)\s*Quelle:\s*https?:\/\/\S+\s*(?=\R|$)/iu', "\n", $reply);
+        $reply = preg_replace('/(^|\R)\s*Quellen:\s*https?:\/\/\S+\s*(?=\R|$)/iu', "\n", $reply);
+        $reply = preg_replace('/\R{3,}/u', "\n\n", trim($reply));
+    }
+
+    return trim((string) $reply);
 }
 
 function kdcb_rest_chat_handler($request)
@@ -266,6 +307,8 @@ function kdcb_rest_chat_handler($request)
     if (is_wp_error($reply)) {
         error_log('KDCB chat generation failed: ' . $reply->get_error_code());
         $reply = 'Ich kann gerade keine zuverlässige Antwort erzeugen. Bitte nutzen Sie das Mängelformular oder kontaktieren Sie K&D direkt.';
+    } else {
+        $reply = kdcb_chat_postprocess_reply($reply, $latest_user_message);
     }
 
     return new WP_REST_Response(array(
