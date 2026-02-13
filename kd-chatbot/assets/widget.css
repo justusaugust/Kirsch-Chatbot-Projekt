@@ -1,5 +1,5 @@
 .kdcb-widget {
-  --kdcb-font-sans: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+  --kdcb-font-sans: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --kdcb-color-bg: #f4f1ec;
   --kdcb-color-panel: #ffffff;
   --kdcb-color-ink: #1e1f22;
@@ -117,29 +117,44 @@
   margin: 0;
   font-size: 0.95rem;
   letter-spacing: 0.01em;
-  font-weight: 700;
+  font-weight: 750;
 }
 
+.kdcb-header-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kdcb-reset,
 .kdcb-close {
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
   cursor: pointer;
-  padding: 6px;
   width: 32px;
   height: 32px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 
+.kdcb-reset svg,
+.kdcb-close svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.kdcb-reset:hover,
 .kdcb-close:hover {
   background: rgba(255, 255, 255, 0.16);
   border-color: rgba(255, 255, 255, 0.38);
 }
 
+.kdcb-reset:focus-visible,
 .kdcb-close:focus-visible {
   outline: 2px solid rgba(181, 144, 79, 0.65);
   outline-offset: 1px;
@@ -162,9 +177,77 @@
   border-radius: 14px;
   font-size: 0.91rem;
   line-height: 1.48;
+  font-weight: 550;
   word-wrap: break-word;
-  white-space: pre-wrap;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+}
+
+.kdcb-msg-content {
+  line-height: 1.55;
+}
+
+.kdcb-msg-content p {
+  margin: 0;
+}
+
+.kdcb-msg-content p + p,
+.kdcb-msg-content p + ul,
+.kdcb-msg-content p + ol,
+.kdcb-msg-content ul + p,
+.kdcb-msg-content ol + p {
+  margin-top: 9px;
+}
+
+.kdcb-msg-content ul,
+.kdcb-msg-content ol {
+  margin: 9px 0 0;
+  padding-left: 18px;
+}
+
+.kdcb-msg-content li + li {
+  margin-top: 4px;
+}
+
+.kdcb-msg-content a {
+  color: #6f4b16;
+  font-weight: 700;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+.kdcb-msg-content strong {
+  font-weight: 750;
+}
+
+.kdcb-msg-content em {
+  font-style: italic;
+}
+
+.kdcb-msg-content code {
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  background: rgba(34, 35, 40, 0.08);
+  border: 1px solid rgba(34, 35, 40, 0.12);
+  border-radius: 6px;
+  padding: 1px 5px;
+  font-size: 0.84em;
+}
+
+.kdcb-msg-content .kdcb-code {
+  margin: 10px 0 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: #21252b;
+  color: #f5f6f8;
+  border: 1px solid #2d333b;
+  overflow-x: auto;
+}
+
+.kdcb-msg-content .kdcb-code code {
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
 }
 
 .kdcb-msg-user {
@@ -238,6 +321,7 @@
   max-height: 128px;
   resize: none;
   font-size: 0.93rem;
+  font-weight: 550;
   color: var(--kdcb-color-text);
   line-height: 1.45;
 }
@@ -378,6 +462,7 @@
   margin: 0 0 4px;
   font-size: 0.81rem;
   line-height: 1.45;
+  font-weight: 560;
   color: #666c74;
 }
 
@@ -402,6 +487,7 @@
   border-radius: 12px;
   padding: 11px 12px;
   font-size: 0.92rem;
+  font-weight: 560;
   color: #262b30;
   background: #fff;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -457,6 +543,7 @@
   color: #705d37;
   font-size: 0.76rem;
   line-height: 1.45;
+  font-weight: 560;
 }
 
 .kdcb-callback-phone {
@@ -518,6 +605,7 @@
   padding: 9px 10px;
   display: none;
   font-size: 0.8rem;
+  font-weight: 600;
   line-height: 1.4;
   border: 1px solid transparent;
 }

@@ -126,7 +126,7 @@ function kdcb_rag_resolve_page($page_url)
         return null;
     }
 
-    $content = kdcb_rag_clean_text($post->post_content, 1800);
+    $content = kdcb_rag_clean_text($post->post_content, 7000);
 
     return array(
         'post_id' => (int) $post_id,
@@ -146,7 +146,7 @@ function kdcb_rag_search_posts($query, $exclude_post_id)
     $args = array(
         'post_type' => array('page', 'post'),
         'post_status' => 'publish',
-        'posts_per_page' => 3,
+        'posts_per_page' => 6,
         's' => $query,
         'ignore_sticky_posts' => true,
     );
@@ -254,6 +254,79 @@ function kdcb_rag_query_terms($query)
     return array_keys($terms);
 }
 
+function kdcb_rag_message_has_any($message, $terms, $needles)
+{
+    $message = kdcb_text_lower((string) $message);
+    $terms_lookup = array();
+
+    if (is_array($terms)) {
+        foreach ($terms as $term) {
+            $terms_lookup[kdcb_text_lower((string) $term)] = true;
+        }
+    }
+
+    foreach ((array) $needles as $needle) {
+        $needle = kdcb_text_lower((string) $needle);
+        if ($needle === '') {
+            continue;
+        }
+
+        if (strpos($message, $needle) !== false || isset($terms_lookup[$needle])) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function kdcb_rag_expand_query_terms($latest_message, $query_terms)
+{
+    $terms = array_values(array_filter((array) $query_terms));
+
+    $leadership_needles = array(
+        'boss', 'chef', 'geschäftsführung', 'geschaeftsfuehrung', 'führung', 'fuehrung',
+        'leitung', 'inhaber', 'gesellschafter', 'ansprechpartner',
+    );
+
+    if (kdcb_rag_message_has_any($latest_message, $terms, $leadership_needles)) {
+        $leadership_boost = array(
+            'geschäftsführung',
+            'geschaeftsfuehrung',
+            'führung',
+            'fuehrung',
+            'leitung',
+            'chef',
+            'inhaber',
+            'ansprechpartner',
+            'team',
+            'über',
+            'ueber',
+        );
+        $terms = array_values(array_unique(array_merge($leadership_boost, $terms)));
+    }
+
+    return $terms;
+}
+
+function kdcb_rag_build_intent_query($latest_message, $query_terms)
+{
+    $terms = (array) $query_terms;
+
+    if (kdcb_rag_message_has_any($latest_message, $terms, array(
+        'boss', 'chef', 'geschäftsführung', 'geschaeftsfuehrung', 'führung', 'fuehrung', 'leitung', 'inhaber',
+    ))) {
+        return 'geschäftsführung team ansprechpartner über uns';
+    }
+
+    if (kdcb_rag_message_has_any($latest_message, $terms, array(
+        'kontakt', 'telefon', 'email', 'e-mail', 'erreichen',
+    ))) {
+        return 'kontakt ansprechpartner telefon e-mail';
+    }
+
+    return '';
+}
+
 function kdcb_rag_build_search_query($latest_message, $query_terms, $current_page)
 {
     $compact_terms = array();
@@ -313,6 +386,46 @@ function kdcb_rag_merge_search_results($primary_results, $fallback_results, $max
     return array_slice($deduped, 0, $max_results);
 }
 
+function kdcb_rag_rank_search_results($results, $query_terms, $max_results)
+{
+    $by_url = array();
+
+    foreach ((array) $results as $item) {
+        if (empty($item['url'])) {
+            continue;
+        }
+
+        $item['term_hits'] = kdcb_rag_count_term_hits(
+            (string) ($item['title'] ?? '') . ' ' . (string) ($item['snippet'] ?? ''),
+            (array) $query_terms
+        );
+
+        $url = (string) $item['url'];
+        if (!isset($by_url[$url]) || ((int) $item['term_hits'] > (int) $by_url[$url]['term_hits'])) {
+            $by_url[$url] = $item;
+        }
+    }
+
+    $ranked = array_values($by_url);
+    usort($ranked, function ($a, $b) {
+        $a_hits = (int) ($a['term_hits'] ?? 0);
+        $b_hits = (int) ($b['term_hits'] ?? 0);
+        if ($a_hits !== $b_hits) {
+            return ($a_hits > $b_hits) ? -1 : 1;
+        }
+
+        $a_title_len = strlen((string) ($a['title'] ?? ''));
+        $b_title_len = strlen((string) ($b['title'] ?? ''));
+        if ($a_title_len === $b_title_len) {
+            return 0;
+        }
+
+        return ($a_title_len > $b_title_len) ? -1 : 1;
+    });
+
+    return array_slice($ranked, 0, $max_results);
+}
+
 function kdcb_rag_match_faq($query, $faq_raw, $max_results)
 {
     $pairs = kdcb_rag_parse_faq($faq_raw);
@@ -366,7 +479,8 @@ function kdcb_rag_match_faq($query, $faq_raw, $max_results)
 
 function kdcb_rag_build_context($page_url, $latest_message, $faq_raw)
 {
-    $query_terms = kdcb_rag_query_terms($latest_message);
+    $raw_query_terms = kdcb_rag_query_terms($latest_message);
+    $query_terms = kdcb_rag_expand_query_terms($latest_message, $raw_query_terms);
     $context = array(
         'latest_message' => kdcb_rag_clean_text($latest_message, 220),
         'query_terms' => $query_terms,
@@ -388,29 +502,31 @@ function kdcb_rag_build_context($page_url, $latest_message, $faq_raw)
 
     $exclude_post_id = is_array($current_page) ? (int) $current_page['post_id'] : 0;
     $search_query = kdcb_rag_build_search_query($latest_message, $query_terms, $current_page);
-    $search_results = kdcb_rag_search_posts($search_query, $exclude_post_id);
+    $search_results_primary = kdcb_rag_search_posts($search_query, $exclude_post_id);
+
+    $intent_query = kdcb_rag_build_intent_query($latest_message, $query_terms);
+    $intent_search_results = array();
+    if (
+        $intent_query !== '' &&
+        kdcb_text_lower($intent_query) !== kdcb_text_lower($search_query)
+    ) {
+        $intent_search_results = kdcb_rag_search_posts($intent_query, $exclude_post_id);
+    }
 
     $fallback_search_results = array();
-    if (count($search_results) < 3 && is_array($current_page) && !empty($current_page['title'])) {
+    if (
+        (count($search_results_primary) + count($intent_search_results)) < 4 &&
+        is_array($current_page) &&
+        !empty($current_page['title'])
+    ) {
         $fallback_search_results = kdcb_rag_search_posts($current_page['title'], $exclude_post_id);
     }
 
-    $search_results = kdcb_rag_merge_search_results($search_results, $fallback_search_results, 3);
-
-    foreach ($search_results as &$item) {
-        $item['term_hits'] = kdcb_rag_count_term_hits($item['title'] . ' ' . $item['snippet'], $query_terms);
-    }
-    unset($item);
-
-    usort($search_results, function ($a, $b) {
-        $a_hits = isset($a['term_hits']) ? (int) $a['term_hits'] : 0;
-        $b_hits = isset($b['term_hits']) ? (int) $b['term_hits'] : 0;
-        if ($a_hits === $b_hits) {
-            return 0;
-        }
-
-        return ($a_hits > $b_hits) ? -1 : 1;
-    });
+    $search_results = kdcb_rag_rank_search_results(
+        array_merge($search_results_primary, $intent_search_results, $fallback_search_results),
+        $query_terms,
+        4
+    );
     $context['search_results'] = $search_results;
 
     foreach ($search_results as $result) {

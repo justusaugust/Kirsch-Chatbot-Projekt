@@ -108,6 +108,148 @@
     return text;
   }
 
+  function sanitizeAssistantText(value, maxLen) {
+    var text = String(value || '').replace(/<[^>]*>/g, '');
+    text = text.replace(/\r\n?/g, '\n');
+    text = text.replace(/[ \t]+\n/g, '\n');
+    text = text.replace(/\n{3,}/g, '\n\n');
+    text = text.trim();
+    if (maxLen && text.length > maxLen) {
+      text = text.slice(0, maxLen);
+    }
+    return text;
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function renderInlineMarkdown(value) {
+    var escaped = escapeHtml(value);
+    var codeChunks = [];
+
+    escaped = escaped.replace(/`([^`]+)`/g, function (_match, code) {
+      var token = '%%KDCB_INLINE_CODE_' + codeChunks.length + '%%';
+      codeChunks.push('<code>' + code + '</code>');
+      return token;
+    });
+
+    escaped = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, function (_match, label, url) {
+      var normalizedUrl = String(url || '').replace(/&amp;/g, '&');
+      try {
+        var parsed = new URL(normalizedUrl, window.location.origin);
+        if (!/^https?:$/i.test(parsed.protocol)) {
+          return label;
+        }
+        normalizedUrl = parsed.toString();
+      } catch (error) {
+        return label;
+      }
+
+      return '<a href="' + escapeHtml(normalizedUrl) + '" target="_blank" rel="noopener noreferrer">' + label + '</a>';
+    });
+
+    escaped = escaped.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+    escaped = escaped.replace(/%%KDCB_INLINE_CODE_(\d+)%%/g, function (_match, index) {
+      return codeChunks[Number(index)] || '';
+    });
+
+    return escaped;
+  }
+
+  function renderAssistantMarkdown(value) {
+    var text = sanitizeAssistantText(value, 2500);
+    if (!text) {
+      return '';
+    }
+
+    var codeBlocks = [];
+    text = text.replace(/```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g, function (_match, lang, code) {
+      var token = '%%KDCB_BLOCK_CODE_' + codeBlocks.length + '%%';
+      var langClass = lang ? ' class="language-' + escapeHtml(lang) + '"' : '';
+      codeBlocks.push('<pre class="kdcb-code"><code' + langClass + '>' + escapeHtml(code) + '</code></pre>');
+      return token;
+    });
+
+    var lines = text.split('\n');
+    var htmlParts = [];
+    var paragraphLines = [];
+    var listType = null;
+
+    function flushParagraph() {
+      if (!paragraphLines.length) {
+        return;
+      }
+      htmlParts.push('<p>' + renderInlineMarkdown(paragraphLines.join('\n')).replace(/\n/g, '<br>') + '</p>');
+      paragraphLines = [];
+    }
+
+    function closeList() {
+      if (listType === 'ul') {
+        htmlParts.push('</ul>');
+      } else if (listType === 'ol') {
+        htmlParts.push('</ol>');
+      }
+      listType = null;
+    }
+
+    lines.forEach(function (line) {
+      var trimmed = String(line || '').trim();
+      var ulMatch = /^[-*]\s+(.+)$/.exec(trimmed);
+      var olMatch = /^(\d+)\.\s+(.+)$/.exec(trimmed);
+
+      if (!trimmed) {
+        flushParagraph();
+        closeList();
+        return;
+      }
+
+      if (ulMatch) {
+        flushParagraph();
+        if (listType !== 'ul') {
+          closeList();
+          listType = 'ul';
+          htmlParts.push('<ul>');
+        }
+        htmlParts.push('<li>' + renderInlineMarkdown(ulMatch[1]) + '</li>');
+        return;
+      }
+
+      if (olMatch) {
+        flushParagraph();
+        if (listType !== 'ol') {
+          closeList();
+          listType = 'ol';
+          htmlParts.push('<ol>');
+        }
+        htmlParts.push('<li>' + renderInlineMarkdown(olMatch[2]) + '</li>');
+        return;
+      }
+
+      if (listType) {
+        closeList();
+      }
+      paragraphLines.push(line);
+    });
+
+    flushParagraph();
+    closeList();
+
+    var html = htmlParts.join('');
+    html = html.replace(/%%KDCB_BLOCK_CODE_(\d+)%%/g, function (_match, index) {
+      return codeBlocks[Number(index)] || '';
+    });
+
+    return html;
+  }
+
   function buildWidgetUI() {
     var root = document.createElement('div');
     root.className = 'kdcb-widget';
@@ -119,13 +261,26 @@
     header.className = 'kdcb-header';
     var title = document.createElement('h3');
     title.textContent = (cfg.strings && cfg.strings.title) || 'K&D Hausbau Chat';
+
+    var headerControls = document.createElement('div');
+    headerControls.className = 'kdcb-header-controls';
+
+    var resetBtn = document.createElement('button');
+    resetBtn.className = 'kdcb-reset';
+    resetBtn.type = 'button';
+    resetBtn.setAttribute('aria-label', 'Chat zurücksetzen');
+    resetBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 0 1-5 5c-2.21 0-4.1-1.43-4.78-3.42l-1.9.65A7 7 0 1 0 12 6z"/></svg>';
+
     var closeBtn = document.createElement('button');
     closeBtn.className = 'kdcb-close';
     closeBtn.type = 'button';
     closeBtn.setAttribute('aria-label', 'Schließen');
     closeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+
     header.appendChild(title);
-    header.appendChild(closeBtn);
+    headerControls.appendChild(resetBtn);
+    headerControls.appendChild(closeBtn);
+    header.appendChild(headerControls);
 
     var messages = document.createElement('div');
     messages.className = 'kdcb-messages';
@@ -195,6 +350,10 @@
       panel.classList.remove('kdcb-open');
     });
 
+    resetBtn.addEventListener('click', function () {
+      resetChatState();
+    });
+
     sendBtn.addEventListener('click', function () {
       handleSendMessage(input, sendBtn, messages, defectWrap);
     });
@@ -217,7 +376,35 @@
       input: input,
       sendBtn: sendBtn,
       defectWrap: defectWrap,
+      resetBtn: resetBtn,
     };
+  }
+
+  function resetChatState() {
+    state.messages = [];
+    clearDefectDraft();
+    localStorage.removeItem(STORAGE_MESSAGES);
+    localStorage.removeItem(STORAGE_DEFECT_DRAFT);
+    localStorage.removeItem(STORAGE_SESSION);
+    state.sessionId = getOrCreateSessionId();
+
+    if (ui && ui.input) {
+      ui.input.value = '';
+      ui.input.style.height = '';
+      ui.input.disabled = false;
+    }
+
+    if (ui && ui.sendBtn) {
+      ui.sendBtn.disabled = false;
+    }
+
+    if (ui && ui.defectWrap) {
+      ui.defectWrap.hidden = true;
+      ui.defectWrap.innerHTML = '';
+    }
+
+    setSending(false);
+    renderMessages();
   }
 
   function scrollMessagesToBottom(container) {
@@ -225,7 +412,9 @@
   }
 
   function addMessage(role, text, sources) {
-    var clean = sanitizeText(text, role === 'user' ? 1500 : 2500);
+    var clean = role === 'assistant'
+      ? sanitizeAssistantText(text, 2500)
+      : sanitizeText(text, 1500);
     if (!clean) {
       return;
     }
@@ -254,7 +443,15 @@
     state.messages.forEach(function (message, index) {
       var item = document.createElement('div');
       item.className = 'kdcb-msg ' + (message.role === 'user' ? 'kdcb-msg-user' : 'kdcb-msg-assistant');
-      item.textContent = message.content;
+
+      var content = document.createElement('div');
+      content.className = 'kdcb-msg-content';
+      if (message.role === 'assistant') {
+        content.innerHTML = renderAssistantMarkdown(message.content);
+      } else {
+        content.textContent = message.content;
+      }
+      item.appendChild(content);
 
       if (
         message.role === 'assistant' &&
@@ -347,7 +544,7 @@
       };
 
       var data = await postChat(payload);
-      var reply = sanitizeText(data && data.reply ? data.reply : '', 2500);
+      var reply = sanitizeAssistantText(data && data.reply ? data.reply : '', 2500);
 
       if (!reply) {
         reply = (cfg.strings && cfg.strings.error) || 'Der Chat ist aktuell nicht erreichbar.';
@@ -724,13 +921,16 @@
       setStatus(statusNode, 'Vielen Dank. Ihre Mängelmeldung wurde versendet.', false, true);
       addMessage('assistant', 'Vielen Dank. Ihre Mängelmeldung wurde an K&D gesendet.');
       sendStatusPing('[DEFECT_FORM_SUBMITTED]');
-      form.reset();
-      setDefectStep(form, 1);
-      syncCallbackPhoneState(form);
-      clearDefectDraft();
-      if (ui.defectWrap) {
-        ui.defectWrap.hidden = true;
-      }
+      window.setTimeout(function () {
+        form.reset();
+        setDefectStep(form, 1);
+        syncCallbackPhoneState(form);
+        clearStatus(statusNode);
+        clearDefectDraft();
+        if (ui.defectWrap) {
+          ui.defectWrap.hidden = true;
+        }
+      }, 1200);
     } catch (err) {
       setStatus(statusNode, 'Versand fehlgeschlagen. Bitte versuchen Sie es später erneut.', true);
     } finally {
