@@ -21,6 +21,7 @@ KDCB Chatbot provides:
   * Current page context (url_to_postid / page mapping)
   * WordPress search snippets (top 3)
   * FAQ keyword matching (admin-defined Q/A pairs)
+  * Optional compact context pack (always injected into system prompt)
 * Separate defect flow that sends email via wp_mail
 * Zero server-side chat storage and OpenAI Responses API with store:false
 

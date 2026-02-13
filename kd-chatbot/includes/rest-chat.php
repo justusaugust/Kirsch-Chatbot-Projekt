@@ -83,9 +83,41 @@ function kdcb_chat_status_reply($message)
     return 'Bitte fuellen Sie das Maengelformular aus. Es wird direkt an K&D weitergeleitet.';
 }
 
-function kdcb_chat_build_system_prompt($context_text, $page_title)
+function kdcb_chat_behavior_pack()
+{
+    $lines = array(
+        '- Intent zuerst klaeren: Kauf/Miete, Leistungen, Projekt/Objekt, FAQ, Kontakt oder Maengel.',
+        '- Fuer konkrete Daten, Preise, Flaechen, Adressen nur belastbare Werte aus dem Kontext nennen.',
+        '- Bei Ueberblicksfragen erst die Kernpunkte nennen, dann kurze Details.',
+        '- Wenn Kontext fehlt: transparent sagen, was fehlt, und Maengelformular als Kontaktweg anbieten.',
+        '- Keine Spekulation, keine Rechts- oder Finanzberatung ueber den Kontext hinaus.',
+    );
+
+    return implode("\n", $lines);
+}
+
+function kdcb_chat_compact_faq_context($faq_raw, $max_items)
+{
+    $pairs = kdcb_rag_parse_faq($faq_raw);
+    if (empty($pairs)) {
+        return '';
+    }
+
+    $items = array();
+    foreach (array_slice($pairs, 0, $max_items) as $pair) {
+        $question = kdcb_text_substr((string) $pair['question'], 120);
+        $answer = kdcb_text_substr((string) $pair['answer'], 180);
+        $items[] = '- ' . $question . ': ' . $answer;
+    }
+
+    return implode("\n", $items);
+}
+
+function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw)
 {
     $admin_system = trim((string) kdcb_get_option('system_instructions', kdcb_default_options()['kdcb_system_instructions']));
+    $context_pack = trim((string) kdcb_get_option('context_pack', kdcb_default_options()['kdcb_context_pack']));
+    $compact_faq = kdcb_chat_compact_faq_context($faq_raw, 6);
 
     $rules = array(
         $admin_system,
@@ -95,10 +127,19 @@ function kdcb_chat_build_system_prompt($context_text, $page_title)
         'Wenn nach einem Ueberblick (z. B. "Leistungen") gefragt wird, kombiniere CURRENT_PAGE mit relevanten WP_SEARCH-Treffern.',
         'Wenn Informationen fehlen oder uneindeutig sind, sage das klar und verweise auf das Maengelformular als Kontaktweg.',
         'Sicherheitsregel: Frage nicht aktiv nach sensiblen persoenlichen Daten.',
+        "Antwort-Playbook (kompakt):\n" . kdcb_chat_behavior_pack(),
         'Antwortsprache: Deutsch. Stil: klar, kurz, hilfreich.',
         'Antwortformat: zuerst eine direkte Antwort in 2-6 Saetzen, optional kurze Aufzaehlung fuer Details.',
         'Nenne am Ende nur tatsaechlich genutzte Quellen als "Quelle: <url>" (eine Zeile, mehrere URLs mit Komma).',
     );
+
+    if ($context_pack !== '') {
+        $rules[] = "Vorkonfigurierter Kontext (kompakt):\n" . kdcb_sanitize_paragraph($context_pack, 1800);
+    }
+
+    if ($compact_faq !== '') {
+        $rules[] = "FAQ-Kernpunkte (kompakt):\n" . $compact_faq;
+    }
 
     if ($page_title !== '') {
         $rules[] = 'Aktuelle Seite: ' . $page_title;
@@ -210,7 +251,7 @@ function kdcb_rest_chat_handler($request)
     $openai_messages = array(
         array(
             'role' => 'system',
-            'content' => kdcb_chat_build_system_prompt($context_text, $page_title),
+            'content' => kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw),
         ),
     );
 

@@ -23,6 +23,7 @@ function kdcb_default_options()
         'kdcb_openai_api_key' => '',
         'kdcb_model' => 'gpt-5.2',
         'kdcb_system_instructions' => "Du bist der Assistent fuer K&D Hausbau. Antworte praezise, freundlich und nur auf Basis des bereitgestellten Kontexts.",
+        'kdcb_context_pack' => "K&D Profil (kompakt): K&D Hausbau entwickelt, verkauft und verwaltet Wohnimmobilien in Potsdam und Umgebung. Kernleistungen: Beratung, Projektentwicklung & Bautraeger, Hausverwaltung & Vermietung. Prioritaet im Support: 1) konkrete Webseiteninfos liefern, 2) bei fehlender Sicherheit transparent bleiben, 3) bei Maengel-Themen direkt zum Maengelformular leiten.",
         'kdcb_faq_raw' => "",
         'kdcb_defect_email_to' => get_option('admin_email'),
         'kdcb_chat_rate_limit_hourly' => 60,

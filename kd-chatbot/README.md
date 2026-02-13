@@ -30,8 +30,36 @@ WordPress plugin slug/namespace: `kdcb`
    - OpenAI API key
    - Model (`gpt-5.2` default)
    - System instructions
+   - Komprimierter Kontext (immer aktiv)
    - FAQ entries (`Q: ...` / `A: ...` blocks)
    - Defect recipient email
+
+## Prompt/context strategy (v1.1)
+
+- Dynamic RAG context on each query:
+  - `CURRENT_PAGE` (priority high)
+  - `WP_SEARCH` snippets (priority medium)
+  - FAQ keyword matches (priority low)
+- Always-on compact context:
+  - Admin-managed `kdcb_context_pack`
+  - Compact FAQ digest in system prompt (truncated list)
+- Behavior playbook in system prompt:
+  - Intent-first handling
+  - No speculation outside context
+  - Transparent fallback + route to defect form when needed
+
+## Visual token reference (pulled from kud-hausbau.de)
+
+- Primary: `#D1AF1A`
+- Primary hover: `#C4A002`
+- Dark ink: `#071424`
+- Text: `#394350`
+- Muted: `#6A727C`
+- Surface: `#F5F6F6`
+- Border: `#E1E2E4`
+- White: `#FDFDFD`
+- Fonts: `Outfit` (headings/buttons), `Inter` (body)
+- Corner radii: `8px` buttons/cards, `16px` larger containers
 
 ## API test snippets
 

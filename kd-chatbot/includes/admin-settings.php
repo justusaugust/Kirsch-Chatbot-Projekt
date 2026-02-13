@@ -42,6 +42,12 @@ function kdcb_register_settings()
         'default' => kdcb_default_options()['kdcb_system_instructions'],
     ));
 
+    register_setting('kdcb_settings_group', 'kdcb_context_pack', array(
+        'type' => 'string',
+        'sanitize_callback' => 'kdcb_sanitize_context_pack',
+        'default' => kdcb_default_options()['kdcb_context_pack'],
+    ));
+
     register_setting('kdcb_settings_group', 'kdcb_faq_raw', array(
         'type' => 'string',
         'sanitize_callback' => 'kdcb_sanitize_faq_raw',
@@ -89,6 +95,11 @@ function kdcb_sanitize_model($value)
 }
 
 function kdcb_sanitize_system_instructions($value)
+{
+    return sanitize_textarea_field((string) $value);
+}
+
+function kdcb_sanitize_context_pack($value)
 {
     return sanitize_textarea_field((string) $value);
 }
@@ -159,6 +170,7 @@ function kdcb_render_settings_page()
     $api_key = (string) kdcb_get_option('openai_api_key', '');
     $model = (string) kdcb_get_option('model', 'gpt-5.2');
     $system_instructions = (string) kdcb_get_option('system_instructions', kdcb_default_options()['kdcb_system_instructions']);
+    $context_pack = (string) kdcb_get_option('context_pack', kdcb_default_options()['kdcb_context_pack']);
     $faq_raw = (string) kdcb_get_option('faq_raw', '');
     $defect_email_to = (string) kdcb_get_option('defect_email_to', get_option('admin_email'));
     $chat_rate_limit = (int) kdcb_get_option('chat_rate_limit_hourly', 60);
@@ -203,6 +215,13 @@ function kdcb_render_settings_page()
                     <th scope="row"><label for="kdcb_system_instructions">System Instructions</label></th>
                     <td>
                         <textarea id="kdcb_system_instructions" name="kdcb_system_instructions" rows="8" class="large-text code"><?php echo esc_textarea($system_instructions); ?></textarea>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="kdcb_context_pack">Komprimierter Kontext (immer aktiv)</label></th>
+                    <td>
+                        <textarea id="kdcb_context_pack" name="kdcb_context_pack" rows="8" class="large-text code"><?php echo esc_textarea($context_pack); ?></textarea>
+                        <p class="description">Kurzer Wissensblock fuer FAQ-Kernaussagen, Terminologie und Antwortstil. Wird bei jeder Chatanfrage als kompakter Kontext mitgegeben.</p>
                     </td>
                 </tr>
                 <tr>
