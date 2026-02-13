@@ -2,7 +2,7 @@
 /**
  * Plugin Name: KDCB Chatbot
  * Description: Sitewide floating chat widget with lightweight RAG and a separate defect form flow.
- * Version: 1.0.4
+ * Version: 1.0.5
  * Author: K&D Hausbau
  * Text Domain: kd-chatbot
  */
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('KDCB_PLUGIN_VERSION', '1.0.4');
+define('KDCB_PLUGIN_VERSION', '1.0.5');
 define('KDCB_PLUGIN_FILE', __FILE__);
 define('KDCB_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('KDCB_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -22,8 +22,8 @@ function kdcb_default_options()
         'kdcb_enable_widget' => 1,
         'kdcb_openai_api_key' => '',
         'kdcb_model' => 'gpt-5.2',
-        'kdcb_system_instructions' => "Du bist der Assistent für K&D Hausbau. Antworte präzise, freundlich und nur auf Basis des bereitgestellten Kontexts.",
-        'kdcb_context_pack' => "K&D Profil (kompakt): K&D Hausbau entwickelt, verkauft und verwaltet Wohnimmobilien in Potsdam und Umgebung. Kernleistungen: Beratung, Projektentwicklung & Bauträger, Hausverwaltung & Vermietung. Priorität im Support: 1) konkrete Webseiteninfos liefern, 2) bei fehlender Sicherheit transparent bleiben, 3) bei Mängel-Themen direkt zum Mängelformular leiten.",
+        'kdcb_system_instructions' => "Du bist der offizielle KI-Mitarbeiter der Kirsch & Drechsler Hausbau GmbH. Antworte präzise, verbindlich und nur auf Basis des bereitgestellten Kontexts.",
+        'kdcb_context_pack' => "K&D Profil (kompakt): Kirsch & Drechsler Hausbau GmbH entwickelt, verkauft und verwaltet Wohnimmobilien in Potsdam und Umgebung. Kernleistungen: Beratung, Projektentwicklung & Bauträger, Hausverwaltung & Vermietung. Kommunikationslinie: souverän, lösungsorientiert, in wir-Form. Bei Vorwürfen keine Spekulation, unbelegte Behauptungen sachlich zurückweisen und konkrete Klärungswege anbieten.",
         'kdcb_faq_raw' => "",
         'kdcb_defect_email_to' => get_option('admin_email'),
         'kdcb_chat_rate_limit_hourly' => 60,

@@ -113,15 +113,53 @@ function kdcb_chat_compact_faq_context($faq_raw, $max_items)
     return implode("\n", $items);
 }
 
-function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw)
+function kdcb_chat_is_reputation_sensitive($message)
+{
+    $message = kdcb_text_lower((string) $message);
+    if ($message === '') {
+        return false;
+    }
+
+    $keywords = array(
+        'stimmt es',
+        'gerücht',
+        'geruecht',
+        'vorwurf',
+        'beschuldigung',
+        'rausschmeiß',
+        'rausschmeiss',
+        'kündigung',
+        'kuendigung',
+        'räumung',
+        'raeumung',
+        'betrug',
+        'abzocke',
+        'illegal',
+        'skandal',
+        'lüge',
+        'luege',
+    );
+
+    foreach ($keywords as $keyword) {
+        if (strpos($message, $keyword) !== false) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw, $latest_user_message)
 {
     $admin_system = trim((string) kdcb_get_option('system_instructions', kdcb_default_options()['kdcb_system_instructions']));
     $context_pack = trim((string) kdcb_get_option('context_pack', kdcb_default_options()['kdcb_context_pack']));
     $compact_faq = kdcb_chat_compact_faq_context($faq_raw, 6);
+    $is_reputation_sensitive = kdcb_chat_is_reputation_sensitive($latest_user_message);
 
     $rules = array(
         $admin_system,
-        'Du bist der Assistent dieser Website.',
+        'Rolle: offizieller KI-Mitarbeiter der Kirsch & Drechsler Hausbau GmbH.',
+        'Sprich professionell in wir-Form und antworte souverän, klar und lösungsorientiert.',
         'Nutze strikt nur den bereitgestellten Kontext und erfinde keine Fakten.',
         'Kontext-Priorität: 1) CURRENT_PAGE (hoch), 2) WP_SEARCH (mittel), 3) FAQ_MATCHES (niedrig).',
         'Semantik-Regel: Behandle umgangssprachliche Begriffe (z. B. "Boss") als mögliche Anfrage nach Geschäftsführung/Leitung.',
@@ -131,12 +169,23 @@ function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw)
         'Schreibstil: antworte direkt auf die Frage ohne Meta-Einleitung wie "Auf der Seite ... steht".',
         'Nenne den Website-/Firmennamen nur, wenn es für die inhaltliche Klarheit nötig ist.',
         'Nenne Seitennamen/Fundorte nicht im Fließtext, außer der Nutzer fragt explizit danach.',
+        'Vermeide hilflose Formulierungen wie "mir liegen hier keine belastbaren Informationen vor" oder "aus dem Kontext geht nur hervor".',
+        'Keine Beschreibung des internen Such-/Kontextprozesses.',
         "Antwort-Playbook (kompakt):\n" . kdcb_chat_behavior_pack(),
         'Antwortsprache: Deutsch. Stil: klar, kurz, hilfreich.',
         'Antwortformat: zuerst eine direkte Antwort in 2-6 Sätzen, optional kurze Aufzählung für Details.',
         'Nutze lesbares Markdown für Struktur (Absätze, Listen, **Hervorhebungen**), aber keine Tabellen.',
         'Keine Quellen-/Fundstellen-Zeile am Ende, außer der Nutzer fragt explizit nach Quelle/Beleg/Link.',
     );
+
+    if ($is_reputation_sensitive) {
+        $rules[] = implode("\n", array(
+            'Reputationskritische Anfrage erkannt: antworte verbindlich und sachlich als Unternehmensvertreter.',
+            'Übernimm unbelegte Vorwürfe nicht als Tatsache.',
+            'Wenn keine Bestätigung vorliegt, formuliere klar: "Dafür liegt uns keine belastbare Grundlage vor."',
+            'Ergänze knapp, was tatsächlich bekannt ist, und biete einen konkreten Klärungsweg an.',
+        ));
+    }
 
     if ($context_pack !== '') {
         $rules[] = "Vorkonfigurierter Kontext (kompakt):\n" . kdcb_sanitize_paragraph($context_pack, 1800);
@@ -193,6 +242,18 @@ function kdcb_chat_postprocess_reply($reply, $latest_user_message)
         $reply = preg_replace('/(^|\R)\s*Quellen:\s*https?:\/\/\S+\s*(?=\R|$)/iu', "\n", $reply);
         $reply = preg_replace('/\R{3,}/u', "\n\n", trim($reply));
     }
+
+    $soft_rewrites = array(
+        '/\bMir liegen (hier )?keine belastbaren Informationen vor\.?/iu' => 'Dafür liegt keine belastbare Grundlage vor.',
+        '/\bAus dem verfügbaren Kontext geht nur hervor, dass\b/iu' => 'Bekannt ist, dass',
+        '/\bim bereitgestellten Kontext\b/iu' => 'nach aktuellem Kenntnisstand',
+    );
+
+    foreach ($soft_rewrites as $pattern => $replacement) {
+        $reply = preg_replace($pattern, $replacement, $reply);
+    }
+
+    $reply = preg_replace('/\R{3,}/u', "\n\n", trim($reply));
 
     return trim((string) $reply);
 }
@@ -294,7 +355,7 @@ function kdcb_rest_chat_handler($request)
     $openai_messages = array(
         array(
             'role' => 'system',
-            'content' => kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw),
+            'content' => kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw, $latest_user_message),
         ),
     );
 
