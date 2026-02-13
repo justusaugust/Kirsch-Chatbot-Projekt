@@ -160,6 +160,69 @@
   outline-offset: 1px;
 }
 
+.kdcb-privacy-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #f5f2eb;
+  border-bottom: 1px solid rgba(30, 31, 34, 0.1);
+}
+
+.kdcb-privacy-banner[hidden] {
+  display: none !important;
+}
+
+.kdcb-privacy-copy {
+  min-width: 0;
+}
+
+.kdcb-privacy-title {
+  display: block;
+  margin: 0;
+  color: #3a3020;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kdcb-privacy-text {
+  margin: 4px 0 0;
+  color: #545c66;
+  font-size: 0.74rem;
+  line-height: 1.38;
+  font-weight: 500;
+}
+
+.kdcb-privacy-close {
+  border: 1px solid #d5cbb9;
+  background: #fff;
+  color: #5e6772;
+  border-radius: 999px;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.kdcb-privacy-close:hover {
+  color: #2f3338;
+  border-color: #bfa87f;
+  background: #fcf7ec;
+}
+
+.kdcb-privacy-close:focus-visible {
+  outline: 2px solid rgba(181, 144, 79, 0.45);
+  outline-offset: 1px;
+}
+
 .kdcb-messages {
   flex: 1;
   overflow-y: auto;

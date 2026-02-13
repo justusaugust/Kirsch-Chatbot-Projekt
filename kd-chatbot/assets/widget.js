@@ -10,6 +10,7 @@
   var STORAGE_SESSION = 'kdcb_session_id_v2';
   var STORAGE_MESSAGES = 'kdcb_messages_v2';
   var STORAGE_DEFECT_DRAFT = 'kdcb_defect_draft_v2';
+  var STORAGE_PRIVACY_DISMISSED = 'kdcb_privacy_notice_dismissed_v1';
   var DEFECT_STEP1_REQUIRED_FIELDS = ['full_name', 'email', 'object_address'];
   var DEFECT_STEP2_REQUIRED_FIELDS = ['trade', 'defect_location', 'defect_description', 'urgency'];
 
@@ -17,6 +18,7 @@
     sessionId: getOrCreateSessionId(),
     messages: loadMessages(),
     defectDraft: loadDefectDraft(),
+    privacyDismissed: isPrivacyNoticeDismissed(),
     waiting: false,
   };
 
@@ -97,6 +99,27 @@
   function clearDefectDraft() {
     localStorage.removeItem(STORAGE_DEFECT_DRAFT);
     state.defectDraft = null;
+  }
+
+  function isPrivacyNoticeDismissed() {
+    try {
+      return localStorage.getItem(STORAGE_PRIVACY_DISMISSED) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function dismissPrivacyNotice() {
+    state.privacyDismissed = true;
+    try {
+      localStorage.setItem(STORAGE_PRIVACY_DISMISSED, '1');
+    } catch (e) {
+      // Ignore storage errors in private mode.
+    }
+
+    if (ui && ui.privacyBanner) {
+      ui.privacyBanner.hidden = true;
+    }
   }
 
   function sanitizeText(value, maxLen) {
@@ -282,6 +305,16 @@
     headerControls.appendChild(closeBtn);
     header.appendChild(headerControls);
 
+    var privacyBanner = document.createElement('div');
+    privacyBanner.className = 'kdcb-privacy-banner';
+    privacyBanner.hidden = !!state.privacyDismissed;
+    privacyBanner.innerHTML =
+      '<div class="kdcb-privacy-copy">' +
+        '<strong class="kdcb-privacy-title">Hinweis: KI-Chat</strong>' +
+        '<p class="kdcb-privacy-text">Dieser Chat nutzt KI. Chat-Nachrichten werden nicht in WordPress gespeichert. Bitte keine sensiblen persönlichen Daten eingeben (z. B. Konto-, Ausweis- oder Gesundheitsdaten). Angaben aus dem Mängelformular werden nicht an die KI gesendet.</p>' +
+      '</div>' +
+      '<button type="button" class="kdcb-privacy-close" aria-label="Datenschutzhinweis schließen">×</button>';
+
     var messages = document.createElement('div');
     messages.className = 'kdcb-messages';
 
@@ -318,6 +351,7 @@
     defectWrap.hidden = true;
 
     panel.appendChild(header);
+    panel.appendChild(privacyBanner);
     panel.appendChild(messages);
     panel.appendChild(actions);
     panel.appendChild(defectWrap);
@@ -350,6 +384,13 @@
       panel.classList.remove('kdcb-open');
     });
 
+    var privacyCloseBtn = privacyBanner.querySelector('.kdcb-privacy-close');
+    if (privacyCloseBtn) {
+      privacyCloseBtn.addEventListener('click', function () {
+        dismissPrivacyNotice();
+      });
+    }
+
     resetBtn.addEventListener('click', function () {
       resetChatState();
     });
@@ -377,6 +418,7 @@
       sendBtn: sendBtn,
       defectWrap: defectWrap,
       resetBtn: resetBtn,
+      privacyBanner: privacyBanner,
     };
   }
 
