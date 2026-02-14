@@ -60,6 +60,18 @@ function kdcb_register_settings()
         'default' => get_option('admin_email'),
     ));
 
+    register_setting('kdcb_settings_group', 'kdcb_defect_trades_csv', array(
+        'type' => 'string',
+        'sanitize_callback' => 'kdcb_sanitize_csv_list',
+        'default' => kdcb_default_options()['kdcb_defect_trades_csv'],
+    ));
+
+    register_setting('kdcb_settings_group', 'kdcb_defect_urgencies_csv', array(
+        'type' => 'string',
+        'sanitize_callback' => 'kdcb_sanitize_csv_list',
+        'default' => kdcb_default_options()['kdcb_defect_urgencies_csv'],
+    ));
+
     register_setting('kdcb_settings_group', 'kdcb_chat_rate_limit_hourly', array(
         'type' => 'integer',
         'sanitize_callback' => 'kdcb_sanitize_chat_rate_limit',
@@ -107,6 +119,15 @@ function kdcb_sanitize_context_pack($value)
 function kdcb_sanitize_faq_raw($value)
 {
     return sanitize_textarea_field((string) $value);
+}
+
+function kdcb_sanitize_csv_list($value)
+{
+    $items = array_map('sanitize_text_field', explode(',', (string) $value));
+    $items = array_map('trim', $items);
+    $items = array_filter($items, function ($v) { return $v !== ''; });
+
+    return implode(', ', $items);
 }
 
 function kdcb_sanitize_defect_email($value)
@@ -173,6 +194,8 @@ function kdcb_render_settings_page()
     $context_pack = (string) kdcb_get_option('context_pack', kdcb_default_options()['kdcb_context_pack']);
     $faq_raw = (string) kdcb_get_option('faq_raw', '');
     $defect_email_to = (string) kdcb_get_option('defect_email_to', get_option('admin_email'));
+    $defect_trades_csv = (string) kdcb_get_option('defect_trades_csv', kdcb_default_options()['kdcb_defect_trades_csv']);
+    $defect_urgencies_csv = (string) kdcb_get_option('defect_urgencies_csv', kdcb_default_options()['kdcb_defect_urgencies_csv']);
     $chat_rate_limit = (int) kdcb_get_option('chat_rate_limit_hourly', 60);
     $defect_rate_limit = (int) kdcb_get_option('defect_rate_limit_daily', 5);
     ?>
@@ -235,6 +258,20 @@ function kdcb_render_settings_page()
                     <th scope="row"><label for="kdcb_defect_email_to">Empfänger E-Mail für Mängel</label></th>
                     <td>
                         <input type="email" id="kdcb_defect_email_to" name="kdcb_defect_email_to" value="<?php echo esc_attr($defect_email_to); ?>" class="regular-text" />
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="kdcb_defect_trades_csv">Gewerke / Bereiche</label></th>
+                    <td>
+                        <input type="text" id="kdcb_defect_trades_csv" name="kdcb_defect_trades_csv" value="<?php echo esc_attr($defect_trades_csv); ?>" class="large-text" />
+                        <p class="description">Kommagetrennte Liste der Gewerke im Mängelformular.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="kdcb_defect_urgencies_csv">Dringlichkeitsstufen</label></th>
+                    <td>
+                        <input type="text" id="kdcb_defect_urgencies_csv" name="kdcb_defect_urgencies_csv" value="<?php echo esc_attr($defect_urgencies_csv); ?>" class="large-text" />
+                        <p class="description">Kommagetrennte Liste der Dringlichkeitsstufen im Mängelformular.</p>
                     </td>
                 </tr>
                 <tr>

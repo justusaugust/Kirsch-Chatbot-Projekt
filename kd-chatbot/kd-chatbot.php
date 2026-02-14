@@ -26,6 +26,8 @@ function kdcb_default_options()
         'kdcb_context_pack' => "K&D Profil (kompakt): Kirsch & Drechsler Hausbau GmbH entwickelt, verkauft und verwaltet Wohnimmobilien in Potsdam und Umgebung. Kernleistungen: Beratung, Projektentwicklung & Bauträger, Hausverwaltung & Vermietung. Kommunikationslinie: professionell, ruhig, verbindlich. Tonalität: wie ein erfahrener Mitarbeiter im Kundendialog, nicht wie ein Suchassistent. Bei Vorwürfen keine Übernahme als Tatsache; stattdessen klarer Sachstand und nächster Schritt.",
         'kdcb_faq_raw' => "",
         'kdcb_defect_email_to' => get_option('admin_email'),
+        'kdcb_defect_trades_csv' => 'Dach, Fenster, Sanitär, Elektro, Fassade, Innenausbau, Sonstiges',
+        'kdcb_defect_urgencies_csv' => 'niedrig, mittel, hoch',
         'kdcb_chat_rate_limit_hourly' => 60,
         'kdcb_defect_rate_limit_daily' => 5,
     );
@@ -43,22 +45,23 @@ function kdcb_get_option($name, $fallback = null)
     return get_option($key, $fallback);
 }
 
+function kdcb_parse_csv_option($key, $fallback_csv)
+{
+    $raw = (string) kdcb_get_option($key, $fallback_csv);
+    $items = array_map('trim', explode(',', $raw));
+    $items = array_filter($items, function ($v) { return $v !== ''; });
+
+    return array_values($items);
+}
+
 function kdcb_get_defect_trades()
 {
-    return array(
-        'Dach',
-        'Fenster',
-        'Sanitär',
-        'Elektro',
-        'Fassade',
-        'Innenausbau',
-        'Sonstiges',
-    );
+    return kdcb_parse_csv_option('defect_trades_csv', kdcb_default_options()['kdcb_defect_trades_csv']);
 }
 
 function kdcb_get_defect_urgencies()
 {
-    return array('niedrig', 'mittel', 'hoch');
+    return kdcb_parse_csv_option('defect_urgencies_csv', kdcb_default_options()['kdcb_defect_urgencies_csv']);
 }
 
 function kdcb_activate_plugin()
