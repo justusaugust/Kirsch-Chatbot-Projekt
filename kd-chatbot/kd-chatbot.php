@@ -2,7 +2,7 @@
 /**
  * Plugin Name: KDCB Chatbot
  * Description: Sitewide floating chat widget with lightweight RAG and a separate defect form flow.
- * Version: 1.0.6
+ * Version: 1.1.29
  * Author: K&D Hausbau
  * Text Domain: kd-chatbot
  */
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('KDCB_PLUGIN_VERSION', '1.0.6');
+define('KDCB_PLUGIN_VERSION', '1.1.29');
 define('KDCB_PLUGIN_FILE', __FILE__);
 define('KDCB_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('KDCB_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -22,8 +22,8 @@ function kdcb_default_options()
         'kdcb_enable_widget' => 1,
         'kdcb_openai_api_key' => '',
         'kdcb_model' => 'gpt-5.2',
-        'kdcb_system_instructions' => "Du bist der offizielle KI-Mitarbeiter der Kirsch & Drechsler Hausbau GmbH. Antworte präzise, verbindlich und nur auf Basis des bereitgestellten Kontexts.",
-        'kdcb_context_pack' => "K&D Profil (kompakt): Kirsch & Drechsler Hausbau GmbH entwickelt, verkauft und verwaltet Wohnimmobilien in Potsdam und Umgebung. Kernleistungen: Beratung, Projektentwicklung & Bauträger, Hausverwaltung & Vermietung. Kommunikationslinie: souverän, lösungsorientiert, in wir-Form. Bei Vorwürfen keine Spekulation, unbelegte Behauptungen sachlich zurückweisen und konkrete Klärungswege anbieten.",
+        'kdcb_system_instructions' => "Du bist der digitale Service-Mitarbeiter der Hausverwaltung von Kirsch & Drechsler. Antworte verbindlich in wir-Form, lösungsorientiert und ohne Meta-Erklärungen über Suchprozesse. Keine Spekulation: nur belastbare Aussagen aus dem bereitgestellten Kontext. Bei unbelegten Vorwürfen klare, sachliche Zurückweisung und konkreter Klärungsweg.",
+        'kdcb_context_pack' => "K&D Profil (kompakt): Kirsch & Drechsler Hausbau GmbH entwickelt, verkauft und verwaltet Wohnimmobilien in Potsdam und Umgebung. Kernleistungen: Beratung, Projektentwicklung & Bauträger, Hausverwaltung & Vermietung. Kommunikationslinie: professionell, ruhig, verbindlich. Tonalität: wie ein erfahrener Mitarbeiter im Kundendialog, nicht wie ein Suchassistent. Bei Vorwürfen keine Übernahme als Tatsache; stattdessen klarer Sachstand und nächster Schritt.",
         'kdcb_faq_raw' => "",
         'kdcb_defect_email_to' => get_option('admin_email'),
         'kdcb_chat_rate_limit_hourly' => 60,
@@ -116,6 +116,14 @@ function kdcb_enqueue_widget_assets()
         'chat_url' => esc_url_raw(rest_url('kdcb/v1/chat')),
         'defect_url' => esc_url_raw(rest_url('kdcb/v1/submit_defect')),
         'config_url' => esc_url_raw(rest_url('kdcb/v1/config')),
+        'ui_mode' => 'cherry_bubble_v1',
+        'sources_mode' => 'history_only',
+        'cherry_assets' => array(
+            'idle_url' => esc_url_raw(KDCB_PLUGIN_URL . 'assets/cherry/idle.png'),
+            'hover_url' => esc_url_raw(KDCB_PLUGIN_URL . 'assets/cherry/hover.png'),
+            'open_idle_url' => esc_url_raw(KDCB_PLUGIN_URL . 'assets/cherry/open_idle.png'),
+            'open_talk_url' => esc_url_raw(KDCB_PLUGIN_URL . 'assets/cherry/open_talk.png'),
+        ),
         'max_messages' => 12,
         'strings' => array(
             'toggle_label' => 'K&D Chat',

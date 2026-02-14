@@ -61,7 +61,7 @@ function kdcb_openai_extract_text($decoded)
     return trim(implode("\n", $buffer));
 }
 
-function kdcb_openai_create_response($messages)
+function kdcb_openai_create_response($messages, $options = array())
 {
     $api_key = trim((string) kdcb_get_option('openai_api_key', ''));
     if ($api_key === '') {
@@ -73,9 +73,18 @@ function kdcb_openai_create_response($messages)
         $model = 'gpt-5.2';
     }
 
+    $max_output_tokens = isset($options['max_output_tokens']) ? (int) $options['max_output_tokens'] : 420;
+    if ($max_output_tokens < 120) {
+        $max_output_tokens = 120;
+    }
+    if ($max_output_tokens > 2000) {
+        $max_output_tokens = 2000;
+    }
+
     $payload = array(
         'model' => $model,
         'store' => false,
+        'max_output_tokens' => $max_output_tokens,
         'input' => kdcb_openai_normalize_messages($messages),
     );
 

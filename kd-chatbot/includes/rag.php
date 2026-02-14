@@ -16,6 +16,50 @@ function kdcb_rag_clean_text($text, $max_len)
     return $text;
 }
 
+function kdcb_rag_extract_post_text($post, $max_len)
+{
+    if (!$post instanceof WP_Post) {
+        return '';
+    }
+
+    $raw_content = (string) $post->post_content;
+    $rendered_content = apply_filters('the_content', $raw_content);
+
+    $clean_rendered = kdcb_rag_clean_text($rendered_content, $max_len);
+    if ($clean_rendered !== '') {
+        return $clean_rendered;
+    }
+
+    return kdcb_rag_clean_text($raw_content, $max_len);
+}
+
+function kdcb_rag_normalize_url_path($path)
+{
+    $path = rawurldecode((string) $path);
+    $path = preg_replace('#/+#', '/', $path);
+    $path = trim((string) $path, '/');
+
+    if ($path === '') {
+        return '';
+    }
+
+    $home_path = (string) wp_parse_url(home_url('/'), PHP_URL_PATH);
+    $home_path = trim($home_path, '/');
+
+    if ($home_path !== '') {
+        if ($path === $home_path) {
+            return '';
+        }
+
+        if (strpos($path, $home_path . '/') === 0) {
+            $path = substr($path, strlen($home_path) + 1);
+            $path = trim((string) $path, '/');
+        }
+    }
+
+    return $path;
+}
+
 function kdcb_rag_count_term_hits($text, $terms)
 {
     if (!is_array($terms) || empty($terms)) {
@@ -101,8 +145,7 @@ function kdcb_rag_resolve_page($page_url)
     $post_id = (int) url_to_postid($page_url);
 
     if ($post_id <= 0) {
-        $path = (string) wp_parse_url($page_url, PHP_URL_PATH);
-        $path = trim($path, '/');
+        $path = kdcb_rag_normalize_url_path((string) wp_parse_url($page_url, PHP_URL_PATH));
 
         if ($path === '') {
             $front_page_id = (int) get_option('page_on_front');
@@ -110,7 +153,34 @@ function kdcb_rag_resolve_page($page_url)
                 $post_id = $front_page_id;
             }
         } else {
-            $post = get_page_by_path($path, OBJECT, array('page', 'post'));
+            $normalized_url = trailingslashit(home_url('/' . $path));
+            $post_id = (int) url_to_postid($normalized_url);
+            $post = null;
+
+            if ($post_id > 0) {
+                $post = get_post($post_id);
+            }
+
+            if (!$post instanceof WP_Post) {
+                $post = get_page_by_path($path, OBJECT, array('page', 'post'));
+            }
+
+            if (!$post instanceof WP_Post) {
+                $slug = sanitize_title(wp_basename($path));
+                if ($slug !== '') {
+                    $slug_posts = get_posts(array(
+                        'name' => $slug,
+                        'post_type' => array('page', 'post'),
+                        'post_status' => 'publish',
+                        'numberposts' => 1,
+                    ));
+
+                    if (!empty($slug_posts) && $slug_posts[0] instanceof WP_Post) {
+                        $post = $slug_posts[0];
+                    }
+                }
+            }
+
             if ($post instanceof WP_Post) {
                 $post_id = (int) $post->ID;
             }
@@ -126,7 +196,7 @@ function kdcb_rag_resolve_page($page_url)
         return null;
     }
 
-    $content = kdcb_rag_clean_text($post->post_content, 7000);
+    $content = kdcb_rag_extract_post_text($post, 7000);
 
     return array(
         'post_id' => (int) $post_id,
@@ -166,7 +236,7 @@ function kdcb_rag_search_posts($query, $exclude_post_id)
 
             $excerpt = has_excerpt($post) ? get_the_excerpt($post) : '';
             if ($excerpt === '') {
-                $excerpt = kdcb_rag_clean_text($post->post_content, 300);
+                $excerpt = kdcb_rag_extract_post_text($post, 300);
             } else {
                 $excerpt = kdcb_rag_clean_text($excerpt, 300);
             }
@@ -180,6 +250,94 @@ function kdcb_rag_search_posts($query, $exclude_post_id)
     }
 
     wp_reset_postdata();
+
+    return $results;
+}
+
+function kdcb_rag_find_page_by_paths($paths)
+{
+    foreach ((array) $paths as $path) {
+        $path = trim((string) $path);
+        if ($path === '') {
+            continue;
+        }
+
+        $slug = trim($path, '/');
+        if ($slug === '') {
+            continue;
+        }
+
+        $url = esc_url_raw(home_url('/' . $slug . '/'));
+        $post_id = (int) url_to_postid($url);
+
+        $post = null;
+        if ($post_id > 0) {
+            $post = get_post($post_id);
+        }
+
+        if (!$post instanceof WP_Post) {
+            $post = get_page_by_path($slug, OBJECT, array('page', 'post'));
+        }
+
+        if (!$post instanceof WP_Post || $post->post_status !== 'publish') {
+            continue;
+        }
+
+        return array(
+            'title' => get_the_title($post),
+            'url' => get_permalink($post),
+            'snippet' => kdcb_rag_extract_post_text($post, 320),
+        );
+    }
+
+    return null;
+}
+
+function kdcb_rag_inject_intent_boost_results($latest_message, $query_terms, $search_results)
+{
+    $results = is_array($search_results) ? $search_results : array();
+    $existing_urls = array();
+
+    foreach ($results as $item) {
+        if (!empty($item['url'])) {
+            $existing_urls[(string) $item['url']] = true;
+        }
+    }
+
+    $boost_candidates = array();
+
+    if (kdcb_rag_message_has_any($latest_message, $query_terms, array(
+        'job', 'jobs', 'karriere', 'stelle', 'stellen', 'bewerbung', 'bewerben',
+    ))) {
+        $boost_candidates[] = kdcb_rag_find_page_by_paths(array('/job/', '/jobs/', '/karriere/'));
+    }
+
+    if (kdcb_rag_message_has_any($latest_message, $query_terms, array(
+        'leistung', 'leistungen', 'service', 'services', 'angebot', 'angebote',
+        'hausverwaltung', 'beratung', 'projektentwicklung', 'bauträger', 'bautraeger',
+    ))) {
+        $boost_candidates[] = kdcb_rag_find_page_by_paths(array('/leistungen/'));
+    }
+
+    foreach ($boost_candidates as $candidate) {
+        if (!is_array($candidate) || empty($candidate['url'])) {
+            continue;
+        }
+
+        $url = (string) $candidate['url'];
+        if (isset($existing_urls[$url])) {
+            continue;
+        }
+
+        // Force intent pages (e.g. Jobs/Leistungen) into top context slots.
+        $candidate['term_hits'] = max(8, kdcb_rag_count_term_hits(
+            (string) ($candidate['title'] ?? '') . ' ' . (string) ($candidate['snippet'] ?? ''),
+            (array) $query_terms
+        ));
+
+        $results[] = $candidate;
+        $existing_urls[$url] = true;
+    }
 
     return $results;
 }
@@ -240,7 +398,8 @@ function kdcb_rag_query_terms($query)
     $stopwords = array(
         'der', 'die', 'das', 'und', 'oder', 'aber', 'eine', 'einer', 'einen', 'einem', 'ist', 'sind',
         'wie', 'was', 'wer', 'wo', 'wann', 'warum', 'wieso', 'kann', 'können', 'mit', 'für', 'zum', 'zur',
-        'von', 'bei', 'den', 'dem', 'des', 'ich', 'wir', 'sie', 'ein', 'auf', 'im', 'in', 'am', 'an', 'zu',
+        'von', 'bei', 'den', 'dem', 'des', 'ich', 'wir', 'sie', 'ihr', 'ein', 'auf', 'im', 'in', 'am', 'an', 'zu',
+        'habt', 'haben', 'habe', 'gibt', 'gibts',
     );
 
     $terms = array();
@@ -324,6 +483,20 @@ function kdcb_rag_build_intent_query($latest_message, $query_terms)
         return 'kontakt ansprechpartner telefon e-mail';
     }
 
+    if (kdcb_rag_message_has_any($latest_message, $terms, array(
+        'job', 'jobs', 'karriere', 'stelle', 'stellen', 'bewerbung', 'bewerben',
+    ))) {
+        return 'jobs karriere stellen bewerbung arbeit';
+    }
+
+    if (kdcb_rag_message_has_any($latest_message, $terms, array(
+        'leistung', 'leistungen', 'service', 'services', 'angebot', 'angebote',
+        'bietet', 'anbieten',
+        'hausverwaltung', 'beratung', 'projektentwicklung', 'bauträger', 'bautraeger',
+    ))) {
+        return 'leistungen services hausverwaltung beratung projektentwicklung bauträger';
+    }
+
     return '';
 }
 
@@ -395,10 +568,12 @@ function kdcb_rag_rank_search_results($results, $query_terms, $max_results)
             continue;
         }
 
-        $item['term_hits'] = kdcb_rag_count_term_hits(
+        $computed_hits = kdcb_rag_count_term_hits(
             (string) ($item['title'] ?? '') . ' ' . (string) ($item['snippet'] ?? ''),
             (array) $query_terms
         );
+        $existing_hits = isset($item['term_hits']) ? (int) $item['term_hits'] : 0;
+        $item['term_hits'] = max($computed_hits, $existing_hits);
 
         $url = (string) $item['url'];
         if (!isset($by_url[$url]) || ((int) $item['term_hits'] > (int) $by_url[$url]['term_hits'])) {
@@ -527,6 +702,24 @@ function kdcb_rag_build_context($page_url, $latest_message, $faq_raw)
         $query_terms,
         4
     );
+
+    $search_results = kdcb_rag_inject_intent_boost_results($latest_message, $query_terms, $search_results);
+    $search_results = kdcb_rag_rank_search_results($search_results, $query_terms, 4);
+
+    $has_positive_hits = false;
+    foreach ($search_results as $result) {
+        if ((int) ($result['term_hits'] ?? 0) > 0) {
+            $has_positive_hits = true;
+            break;
+        }
+    }
+
+    if ($has_positive_hits) {
+        $search_results = array_values(array_filter($search_results, static function ($item) {
+            return (int) ($item['term_hits'] ?? 0) > 0;
+        }));
+    }
+
     $context['search_results'] = $search_results;
 
     foreach ($search_results as $result) {
