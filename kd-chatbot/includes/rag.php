@@ -319,6 +319,25 @@ function kdcb_rag_inject_intent_boost_results($latest_message, $query_terms, $se
         $boost_candidates[] = kdcb_rag_find_page_by_paths(array('/leistungen/'));
     }
 
+    if (kdcb_rag_message_has_any($latest_message, $query_terms, array(
+        'gründung', 'gruendung', 'gegründet', 'gegruendet', 'seit wann', 'geschichte',
+        'historie', 'wie lange', 'gründer', 'gruender', 'unternehmen', 'über uns', 'ueber uns',
+    ))) {
+        $boost_candidates[] = kdcb_rag_find_page_by_paths(array('/ueber-uns/'));
+    }
+
+    if (kdcb_rag_message_has_any($latest_message, $query_terms, array(
+        'kontakt', 'telefon', 'email', 'e-mail', 'erreichen', 'büro', 'buero', 'adresse', 'standort', 'anfahrt',
+    ))) {
+        $boost_candidates[] = kdcb_rag_find_page_by_paths(array('/kontakt/'));
+    }
+
+    if (kdcb_rag_message_has_any($latest_message, $query_terms, array(
+        'baut', 'bauen', 'baustelle', 'projekt', 'projekte', 'referenz', 'referenzen', 'neubau',
+    ))) {
+        $boost_candidates[] = kdcb_rag_find_page_by_paths(array('/projektentwicklung-bautrager/', '/leistungen/'));
+    }
+
     foreach ($boost_candidates as $candidate) {
         if (!is_array($candidate) || empty($candidate['url'])) {
             continue;
@@ -478,9 +497,9 @@ function kdcb_rag_build_intent_query($latest_message, $query_terms)
     }
 
     if (kdcb_rag_message_has_any($latest_message, $terms, array(
-        'kontakt', 'telefon', 'email', 'e-mail', 'erreichen',
+        'kontakt', 'telefon', 'email', 'e-mail', 'erreichen', 'büro', 'buero', 'adresse', 'standort', 'anfahrt',
     ))) {
-        return 'kontakt ansprechpartner telefon e-mail';
+        return 'kontakt ansprechpartner telefon e-mail adresse';
     }
 
     if (kdcb_rag_message_has_any($latest_message, $terms, array(
@@ -495,6 +514,19 @@ function kdcb_rag_build_intent_query($latest_message, $query_terms)
         'hausverwaltung', 'beratung', 'projektentwicklung', 'bauträger', 'bautraeger',
     ))) {
         return 'leistungen services hausverwaltung beratung projektentwicklung bauträger';
+    }
+
+    if (kdcb_rag_message_has_any($latest_message, $terms, array(
+        'gründung', 'gruendung', 'gegründet', 'gegruendet', 'seit wann', 'geschichte', 'historie',
+        'wie lange', 'entstanden', 'gegründet', 'gründer', 'gruender',
+    ))) {
+        return 'über uns unternehmen geschichte gründung';
+    }
+
+    if (kdcb_rag_message_has_any($latest_message, $terms, array(
+        'baut', 'bauen', 'baustelle', 'projekt', 'projekte', 'referenz', 'referenzen', 'neubau',
+    ))) {
+        return 'bauprojekt projektentwicklung neubau referenzen';
     }
 
     return '';

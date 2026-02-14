@@ -421,6 +421,26 @@
     setCherryVisual(state.launcherHover ? 'hover' : 'idle');
   }
 
+  function isMobileViewport() {
+    return !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+  }
+
+  function updateMobileSheetState(open) {
+    if (!ui) {
+      return;
+    }
+
+    var mobile = isMobileViewport();
+    ui.sheetHeader.hidden = !(mobile && open);
+    ui.backdrop.hidden = !(mobile && open);
+
+    if (mobile && open) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+  }
+
   function getOpenMotionProfile() {
     var prefersReducedMotion = false;
     var isMobile = false;
@@ -475,6 +495,8 @@
     void ui.shell.offsetWidth;
     var motion = getOpenMotionProfile();
 
+    updateMobileSheetState(true);
+
     // Trigger open transitions after a short delay so the lift-in feels deliberate.
     state.openFrameId = window.requestAnimationFrame(function () {
       state.openFrameId = window.requestAnimationFrame(function () {
@@ -517,6 +539,7 @@
     }
 
     ui.root.classList.remove('kdcb-open');
+    updateMobileSheetState(false);
 
     if (ui.historyDrawer) {
       ui.historyDrawer.hidden = true;
@@ -532,6 +555,14 @@
   }
 
   function renderMainBubble() {
+    if (isMobileViewport()) {
+      renderMobileChatView();
+      return;
+    }
+    renderDesktopBubble();
+  }
+
+  function renderDesktopBubble() {
     ui.bubble.innerHTML = '';
 
     if (!state.privacyDismissed) {
@@ -598,6 +629,93 @@
       '<li>Mängelmeldungen</li>' +
       '</ul>';
     ui.bubble.appendChild(starter);
+  }
+
+  function renderMobileChatView() {
+    ui.bubble.innerHTML = '';
+
+    if (!state.privacyDismissed) {
+      var notice = document.createElement('div');
+      notice.className = 'kdcb-privacy-notice kdcb-stagger';
+      notice.innerHTML =
+        '<strong>Hinweis: KI-Chat</strong>' +
+        '<p>Dieser Chat nutzt KI. Chat-Nachrichten werden nicht in WordPress gespeichert. ' +
+        'Bitte keine sensiblen persönlichen Daten eingeben. Angaben aus dem Mängelformular werden nicht an die KI gesendet.</p>';
+      var acceptBtn = document.createElement('button');
+      acceptBtn.type = 'button';
+      acceptBtn.className = 'kdcb-privacy-accept';
+      acceptBtn.textContent = 'Verstanden';
+      acceptBtn.addEventListener('click', function () {
+        dismissPrivacyNotice();
+      });
+      notice.appendChild(acceptBtn);
+      ui.bubble.appendChild(notice);
+      return;
+    }
+
+    var chatList = document.createElement('div');
+    chatList.className = 'kdcb-chat-list';
+
+    if (!state.messages.length) {
+      var welcome = document.createElement('div');
+      welcome.className = 'kdcb-chat-msg kdcb-chat-msg-assistant';
+      welcome.innerHTML =
+        '<p><strong class="kdcb-welcome-heading">Willkommen. Wie können wir helfen?</strong></p>' +
+        '<p>Ich unterstütze Sie direkt bei:</p>' +
+        '<ul>' +
+        '<li>Kauf- und Mietanfragen</li>' +
+        '<li>Leistungen und Ansprechpartnern</li>' +
+        '<li>Mängelmeldungen</li>' +
+        '</ul>';
+      chatList.appendChild(welcome);
+    }
+
+    state.messages.forEach(function (message) {
+      var msgEl = document.createElement('div');
+      msgEl.className = 'kdcb-chat-msg kdcb-chat-msg-' + message.role;
+
+      if (message.role === 'assistant') {
+        msgEl.innerHTML = renderAssistantMarkdown(message.content);
+
+        if (Array.isArray(message.sources) && message.sources.length) {
+          var sourceWrap = document.createElement('div');
+          sourceWrap.className = 'kdcb-main-sources';
+          message.sources.forEach(function (source) {
+            if (!source || !source.title || !source.url) { return; }
+            var link = document.createElement('a');
+            link.href = source.url;
+            link.textContent = source.title;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            sourceWrap.appendChild(link);
+          });
+          if (sourceWrap.childNodes.length) {
+            msgEl.appendChild(sourceWrap);
+          }
+        }
+      } else {
+        msgEl.textContent = message.content;
+      }
+
+      chatList.appendChild(msgEl);
+    });
+
+    if (state.waiting) {
+      var typing = document.createElement('div');
+      typing.className = 'kdcb-chat-msg kdcb-chat-msg-assistant';
+      var dots = document.createElement('div');
+      dots.className = 'kdcb-main-typing';
+      dots.innerHTML = '<span></span><span></span><span></span>';
+      typing.appendChild(dots);
+      chatList.appendChild(typing);
+    }
+
+    ui.bubble.appendChild(chatList);
+
+    // Auto-scroll to bottom after render
+    window.setTimeout(function () {
+      ui.bubble.scrollTop = ui.bubble.scrollHeight;
+    }, 30);
   }
 
   function renderHistoryDrawer() {
@@ -734,9 +852,11 @@
   }
 
   function renderInputState() {
-    var disabled = !!state.waiting;
-    ui.input.disabled = disabled;
-    ui.sendBtn.disabled = disabled;
+    var waiting = !!state.waiting;
+    var empty = !ui.input.value.trim();
+    ui.input.disabled = waiting;
+    ui.sendBtn.disabled = waiting || empty;
+    ui.sendBtn.title = (!waiting && empty) ? 'Bitte Nachricht eingeben' : '';
     updateInputPlaceholder();
     updateInputOverflowState(true);
   }
@@ -1140,15 +1260,87 @@
     defectPanel.className = 'kdcb-defect-panel';
     defectPanel.hidden = true;
 
+    var sheetHeader = document.createElement('div');
+    sheetHeader.className = 'kdcb-sheet-header';
+    sheetHeader.hidden = true;
+
+    var sheetHandle = document.createElement('div');
+    sheetHandle.className = 'kdcb-sheet-handle';
+
+    var sheetTitle = document.createElement('span');
+    sheetTitle.className = 'kdcb-sheet-title';
+    sheetTitle.textContent = (cfg.strings && cfg.strings.sheet_title) || 'K&D Chat';
+
+    var sheetClose = document.createElement('button');
+    sheetClose.type = 'button';
+    sheetClose.className = 'kdcb-sheet-close';
+    sheetClose.setAttribute('aria-label', 'Chat schließen');
+    sheetClose.textContent = '×';
+
+    var sheetActions = document.createElement('div');
+    sheetActions.className = 'kdcb-sheet-actions';
+
+    var sheetDefectBtn = document.createElement('button');
+    sheetDefectBtn.type = 'button';
+    sheetDefectBtn.className = 'kdcb-sheet-action-btn';
+    sheetDefectBtn.setAttribute('aria-label', (cfg.strings && cfg.strings.open_defect) || 'Mängel melden');
+    sheetDefectBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm4 18H6V4h7v5h5v11Z"/></svg>' +
+      '<span>' + ((cfg.strings && cfg.strings.open_defect) || 'Mängel melden') + '</span>';
+
+    var sheetResetBtn = document.createElement('button');
+    sheetResetBtn.type = 'button';
+    sheetResetBtn.className = 'kdcb-sheet-action-btn';
+    sheetResetBtn.setAttribute('aria-label', 'Chat zurücksetzen');
+    sheetResetBtn.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M12 5a7 7 0 1 1-6.95 7.89 1 1 0 1 1 1.99-.28A5 5 0 1 0 12 7h-.03l1.83 1.83a1 1 0 0 1-1.41 1.41l-3.54-3.54a1 1 0 0 1 0-1.41l3.54-3.54a1 1 0 0 1 1.41 1.41L11.97 5H12Z"/></svg>';
+
+    sheetActions.appendChild(sheetDefectBtn);
+    sheetActions.appendChild(sheetResetBtn);
+    sheetActions.appendChild(sheetClose);
+
+    sheetHeader.appendChild(sheetHandle);
+    sheetHeader.appendChild(sheetTitle);
+    sheetHeader.appendChild(sheetActions);
+
+    var backdrop = document.createElement('div');
+    backdrop.className = 'kdcb-backdrop';
+    backdrop.hidden = true;
+
+    shell.appendChild(sheetHeader);
     shell.appendChild(bubble);
     shell.appendChild(historyDrawer);
     shell.appendChild(actions);
     shell.appendChild(utilityPill);
     shell.appendChild(defectPanel);
 
+    root.appendChild(backdrop);
     root.appendChild(shell);
     root.appendChild(launcher);
     document.body.appendChild(root);
+
+    sheetClose.addEventListener('click', function () {
+      closePanel();
+    });
+
+    sheetDefectBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      openDefectOverlay();
+      sendStatusPing('[DEFECT_FORM_OPENED]');
+    });
+
+    sheetResetBtn.addEventListener('click', function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      resetChatState();
+    });
+
+    backdrop.addEventListener('click', function () {
+      closePanel();
+    });
 
     launcher.addEventListener('click', function () {
       if (state.panelOpen) {
@@ -1187,6 +1379,7 @@
       input.style.height = 'auto';
       input.style.height = input.scrollHeight + 'px';
       updateInputOverflowState(true);
+      renderInputState();
     });
 
     input.addEventListener('scroll', function () {
@@ -1244,6 +1437,8 @@
       historyToggle: historyToggle,
       historyDrawer: historyDrawer,
       defectPanel: defectPanel,
+      sheetHeader: sheetHeader,
+      backdrop: backdrop,
     };
   }
 

@@ -56,21 +56,76 @@ function kdcb_chat_should_show_defect_form($message, $request)
         return true;
     }
 
-    $keywords = array(
+    $message_raw = (string) $message;
+    $message = kdcb_text_lower($message_raw);
+    if ($message === '') {
+        return false;
+    }
+
+    // Respect explicit user intent to NOT open the form (German/English).
+    if (kdcb_chat_user_forbids_defect_form($message_raw)) {
+        return false;
+    }
+
+    // Only auto-open when the user clearly expresses reporting intent.
+    $explicit_form_intent = (bool) preg_match(
+        '/\b(mängel\s+melden|maengel\s+melden|mangel\s+melden|mängelformular|maengelformular|mängelmeldung|maengelmeldung)\b/iu',
+        $message_raw
+    );
+
+    // Don't auto-open when the user is asking about the process (informational intent).
+    $is_informational_question = (bool) preg_match(
+        '/\b(wie\s+(läuft|laeuft|funktioniert|geht)|ablauf|prozess|was\s+(ist|passiert|bedeutet)|erkläre|erklaere|erklär|erklaer)\b/iu',
+        $message_raw
+    );
+
+    if ($explicit_form_intent && !$is_informational_question) {
+        return true;
+    }
+
+    $has_defect_topic = kdcb_chat_contains_any($message, array(
         'mangel',
         'schaden',
         'reklamation',
         'defekt',
         'riss',
         'feuchtigkeit',
-    );
+        'schimmel',
+        'wasser',
+        'leck',
+        // English fallbacks (rare, but helps avoid accidental auto-open).
+        'mold',
+        'damage',
+        'defect',
+        'leak',
+    ));
 
-    $message = kdcb_text_lower((string) $message);
+    $has_report_intent = (bool) preg_match('/\b(melden|einreichen|reklamier|anzeigen|beschwer|report|submit)\w*\b/iu', $message_raw);
 
-    foreach ($keywords as $keyword) {
-        if (strpos($message, $keyword) !== false) {
-            return true;
-        }
+    return $has_defect_topic && $has_report_intent;
+}
+
+function kdcb_chat_user_forbids_defect_form($message_raw)
+{
+    $message_raw = (string) $message_raw;
+    $message = kdcb_text_lower($message_raw);
+    if ($message === '') {
+        return false;
+    }
+
+    // "No / don't / do not" close to "form/formular" (any language).
+    if (preg_match('/\b(kein|keine|nicht|ohne|no|don\'?t|do\s+not)\b.{0,34}\b(form|formular|mängelformular|maengelformular|defect\s*form)\b/iu', $message_raw)) {
+        return true;
+    }
+
+    // Explicitly: do not open/show the form.
+    if (preg_match('/\b(nicht|kein|no|don\'?t|do\s+not)\b.{0,16}\b(öffne|oeffne|zeige|open|show)\b.{0,22}\b(form|formular|mängelformular|maengelformular)\b/iu', $message_raw)) {
+        return true;
+    }
+
+    // User wants chat-only handling.
+    if (preg_match('/\b(nur|only)\b.{0,14}\b(im\s+chat|hier|chat\s+only|in\s+chat)\b/iu', $message_raw) && strpos($message, 'form') !== false) {
+        return true;
     }
 
     return false;
@@ -209,6 +264,85 @@ function kdcb_chat_contains_any($message, $needles)
     return false;
 }
 
+function kdcb_chat_normalize_lang_code($lang_code)
+{
+    $lang_code = strtolower(trim((string) $lang_code));
+    $supported = array('de', 'en', 'fr', 'es', 'it');
+    return in_array($lang_code, $supported, true) ? $lang_code : 'de';
+}
+
+function kdcb_chat_detect_requested_language($message_raw)
+{
+    $message_raw = (string) $message_raw;
+    $m = kdcb_text_lower($message_raw);
+    if ($m === '') {
+        return 'de';
+    }
+
+    // Explicit language request patterns. Keep narrow to avoid misclassifying
+    // questions like "Bietet ihr Beratung auf Englisch?".
+    $patterns = array(
+        'de' => array(
+            '/\b(antworte|antworten|answer|respond|reply)\b.{0,24}\b(auf|in)\s+deutsch\b/iu',
+            '/\bauf\s+deutsch\b.{0,16}\b(bittee?|please|antwort)\b/iu',
+            '/\bdeutsch\s+(bitte|please)\b\s*$/iu',
+        ),
+        'en' => array(
+            '/\b(answer|respond|reply)\b.{0,24}\bin\s+english\b/iu',
+            '/\b(antworte|antworten)\b.{0,24}\b(auf|in)\s+englisch\b/iu',
+            '/\bauf\s+englisch\b.{0,16}\b(bittee?|please|antwort)\b/iu',
+            '/\bin\s+english\b.{0,16}\bplease\b/iu',
+            '/\benglish\s+please\b\s*$/iu',
+            '/\bauf\s+englisch\b\s*$/iu',
+            '/\bin\s+english\b\s*$/iu',
+        ),
+        'fr' => array(
+            '/\b(answer|respond|reply)\b.{0,24}\bin\s+french\b/iu',
+            '/\b(antworte|antworten)\b.{0,24}\b(auf|in)\s+franz(ö|oe)sisch\b/iu',
+            '/\bauf\s+franz(ö|oe)sisch\b.{0,16}\b(bittee?|please|antwort)\b/iu',
+            '/\ben\s+fran(c|ç)ais\b.{0,16}\b(s\'?il\\s+vous\\s+pla[iî]t|svp)\b/iu',
+            '/\bfran(c|ç)ais\s+(svp|s\'?il\\s+vous\\s+pla[iî]t)\b\s*$/iu',
+        ),
+        'es' => array(
+            '/\b(answer|respond|reply)\b.{0,24}\bin\s+spanish\b/iu',
+            '/\b(antworte|antworten)\b.{0,24}\b(auf|in)\s+spanisch\b/iu',
+            '/\bauf\s+spanisch\b.{0,16}\b(bittee?|please|antwort)\b/iu',
+            '/\b(responde|respuesta)\b.{0,24}\ben\s+espa(ñ|n)ol\b/iu',
+            '/\bespa(ñ|n)ol\s+(por\\s+favor|please)\b\s*$/iu',
+        ),
+        'it' => array(
+            '/\b(answer|respond|reply)\b.{0,24}\bin\s+italian\b/iu',
+            '/\b(antworte|antworten)\b.{0,24}\b(auf|in)\s+italienisch\b/iu',
+            '/\bauf\s+italienisch\b.{0,16}\b(bittee?|please|antwort)\b/iu',
+            '/\b(in)\s+italiano\b.{0,16}\b(per\\s+favore)\b/iu',
+            '/\bitaliano\s+(per\\s+favore)\b\s*$/iu',
+        ),
+    );
+
+    foreach ($patterns as $lang => $list) {
+        foreach ($list as $pattern) {
+            if (preg_match($pattern, $message_raw)) {
+                return $lang;
+            }
+        }
+    }
+
+    return 'de';
+}
+
+function kdcb_chat_language_label($lang_code)
+{
+    $lang_code = kdcb_chat_normalize_lang_code($lang_code);
+    $labels = array(
+        'de' => 'Deutsch',
+        'en' => 'Englisch',
+        'fr' => 'Französisch',
+        'es' => 'Spanisch',
+        'it' => 'Italienisch',
+    );
+    return isset($labels[$lang_code]) ? $labels[$lang_code] : 'Deutsch';
+}
+
 function kdcb_chat_is_injection_attempt($message)
 {
     $message = kdcb_text_lower((string) $message);
@@ -242,13 +376,34 @@ function kdcb_chat_is_injection_attempt($message)
         return true;
     }
 
+    // Catch morphology variants and stealth exfiltration attempts.
+    if (preg_match('/\bintern\w*\s+(regel\w*|anweis\w*|richtlin\w*)\b/iu', $message)) {
+        return true;
+    }
+
+    if (preg_match('/\b(system|developer)\b.{0,40}\b(prompt|anweis\w*|regel\w*)\b/iu', $message)) {
+        return true;
+    }
+
+    if (strpos($message, 'base64') !== false && preg_match('/\b(prompt|system|intern|regel|anweis)\w*\b/iu', $message)) {
+        return true;
+    }
+
+    if (strpos($message, 'json') !== false && preg_match('/\b(prompt|system|intern|regel|anweis)\w*\b/iu', $message)) {
+        return true;
+    }
+
+    if (strpos($message, 'yaml') !== false && preg_match('/\b(prompt|system|intern|regel|anweis)\w*\b/iu', $message)) {
+        return true;
+    }
+
     return false;
 }
 
 function kdcb_chat_injection_reply()
 {
-    return 'Dabei können wir nicht helfen. Interne Regeln, Systemanweisungen und Schlüssel werden nicht offengelegt. '
-        . 'Wenn Sie ein Anliegen zu Kauf, Miete, Hausverwaltung oder einem Mangel haben, helfen wir Ihnen gern konkret weiter.';
+    return 'Dabei können wir nicht helfen. Interne Anweisungen, System-Prompts oder API-Schlüssel geben wir nicht heraus (auch nicht als JSON/Base64). '
+        . 'Wenn Sie ein Anliegen zu Kauf, Miete, Hausverwaltung oder Mängeln haben, helfen wir Ihnen gern konkret weiter.';
 }
 
 function kdcb_chat_is_vague_input($message)
@@ -306,8 +461,193 @@ function kdcb_chat_is_legal_sensitive($message)
         'rechtssicher',
         'anwalt',
         'gesetz',
-        'mieter',
+        'mietrecht',
     ));
+}
+
+function kdcb_chat_is_wrongdoing_instruction_request($message)
+{
+    $message_raw = (string) $message;
+    $message = kdcb_text_lower($message_raw);
+    if ($message === '') {
+        return false;
+    }
+
+    // Strong signals for wrongdoing / bypassing legal process.
+    $strong = array(
+        'ohne rechtsweg',
+        'ohne gericht',
+        'illegal',
+        'umgehen',
+        'bypass',
+        'maximalen druck',
+        'druck machen',
+        'schikane',
+        'schikanieren',
+        'nötigen',
+        'no legal',
+        'without court',
+        'schloss wechseln',
+        'schloss austauschen',
+        'schlüssel tauschen',
+        'schluessel tauschen',
+        'strom abstellen',
+        'wasser abstellen',
+        'heizung abstellen',
+        'utilities shut off',
+        'change locks',
+    );
+
+    if (kdcb_chat_contains_any($message, $strong)) {
+        return true;
+    }
+
+    // Coercive utility shut-off / lock-out tactics.
+    if (
+        preg_match('/\b(mieter|tenant)\b/iu', $message_raw) &&
+        (
+            preg_match('/\b(strom|wasser|heizung|gas|utilities)\b.{0,40}\b(abschalt\w*|abstell\w*|abdrehen|zudrehen|sperr\w*|unterbrech\w*)\b/iu', $message_raw) ||
+            preg_match('/\b(schalt\w*|stell\w*)\b.{0,50}\b(strom|wasser|heizung|gas|utilities)\b.{0,24}\b(ab|aus)\b/iu', $message_raw)
+        )
+    ) {
+        return true;
+    }
+
+    // Eviction / kick-out instructions (even without explicit "illegal").
+    $eviction_topic = (bool) preg_match('/\b(mieter|tenant)\b/iu', $message)
+        && (bool) preg_match('/\b(raus\w*|loswerd\w*|rauswerf\w*|rausschmei(ss|ß)\w*|kick\s*out|evict\w*|auszieh\w*|auszug)\b/iu', $message_raw);
+    $instruction_intent = (bool) preg_match('/\b(wie\s+kann\s+ich|how\s+(do|can)\s+i|gib\s+mir|give\s+me|anleitung|step\s*by\s*step|schritt\s*f(ü|ue)r\s*schritt|tipps?|trick)\b/iu', $message_raw);
+    $bypass_legal = (bool) preg_match('/\b(ohne\s+gericht|without\s+court|ohne\s+rechtsweg|illegal|umgehen)\b/iu', $message_raw);
+    $harmful_tactic = kdcb_chat_contains_any($message, array(
+        'schloss',
+        'schlüssel',
+        'schluessel',
+        'strom',
+        'wasser',
+        'heizung',
+        'utilities',
+        'lock',
+    ));
+
+    if ($eviction_topic && ($instruction_intent || $bypass_legal || $harmful_tactic)) {
+        return true;
+    }
+
+    // Procedural wrongdoing requests.
+    if (preg_match('/\b(schritt\s*f(ü|ue)r\s*schritt|step\s*by\s*step|anleitung|plan)\b.{0,80}\b(illegal|ohne\s+gericht|without\s+court|ohne\s+rechtsweg|umgehen|druck|schikane)\b/iu', $message_raw)) {
+        return true;
+    }
+
+    return false;
+}
+
+function kdcb_chat_is_beyond_scope_request($message)
+{
+    $message_raw = (string) $message;
+    $message = kdcb_text_lower($message_raw);
+    if ($message === '') {
+        return false;
+    }
+
+    // Creative writing / entertainment requests are out of scope for this service chat.
+    // We keep this narrow to avoid blocking legitimate "Unternehmensgeschichte" questions.
+    if (preg_match('/\b(schreib|schreibe|verfass|verfasse|dicht|dichte|komponier|komponiere|mach|mache|erstelle|generier|erzähl|erzaehl|erzähle)\w*\b.{0,60}\b(gedicht|poem|roman|novel|novelle|kurzgeschichte|märchen|maerchen|fabel|songtext|liedtext|lyrics|rap|haiku)\b/iu', $message_raw)) {
+        return true;
+    }
+
+    if (preg_match('/\b(write|compose|draft|create)\b.{0,60}\b(poem|novel|short\\s+story|story|lyrics|song|rap|haiku)\b/iu', $message_raw)) {
+        return true;
+    }
+
+    // "Tell me a story" style prompts.
+    if (preg_match('/\b(erzähl|erzaehl|erzähle|tell)\w*\b.{0,40}\b(ein|eine|einen|a)\b.{0,18}\b(geschichte|story|märchen|maerchen|fabel)\b/iu', $message_raw)) {
+        return true;
+    }
+
+    return false;
+}
+
+function kdcb_chat_beyond_scope_reply()
+{
+    return "Dabei können wir nicht helfen. Dieser Chat ist für Fragen zu **Kauf**, **Miete**, **Leistungen**, **Kontakt** und **Mängeln** da.\n\n"
+        . "Wenn Sie eine konkrete Frage zu einem dieser Themen haben, schreiben Sie sie bitte kurz.";
+}
+
+function kdcb_chat_wrongdoing_reply()
+{
+    return "Dabei können wir nicht helfen. Wir können keine Rechtsberatung leisten und geben keine Anleitungen zu rechtswidrigem oder schädigendem Vorgehen.\n\n"
+        . "Wenn es ein konkretes Problem im Mietverhältnis gibt, empfehlen wir eine rechtliche Beratung oder die Klärung über die vorgesehenen gesetzlichen Wege. "
+        . "Wenn Sie möchten, schildern Sie kurz den Sachverhalt (ohne sensible Daten), dann nennen wir Ihnen den passenden Kontaktweg.";
+}
+
+function kdcb_log_token_usage($usage, $model = '')
+{
+    if (!is_array($usage) || empty($usage['total_tokens'])) {
+        return;
+    }
+
+    $entry = array(
+        'ts' => time(),
+        'model' => $model !== '' ? $model : (string) kdcb_get_option('model', 'gpt-5.2'),
+        'input' => (int) $usage['input_tokens'],
+        'output' => (int) $usage['output_tokens'],
+        'total' => (int) $usage['total_tokens'],
+    );
+
+    $log = get_option('kdcb_token_log', array());
+    if (!is_array($log)) {
+        $log = array();
+    }
+
+    $log[] = $entry;
+
+    if (count($log) > 500) {
+        $log = array_slice($log, -500);
+    }
+
+    update_option('kdcb_token_log', $log, false);
+}
+
+function kdcb_chat_search_tool_schema()
+{
+    return array(
+        'type' => 'function',
+        'name' => 'search_website',
+        'description' => 'Durchsuche die K&D-Website. Liefert eine Liste relevanter Seiten mit Titel, URL und Vorschau. Nutze anschließend get_page um den vollständigen Inhalt einer Seite zu laden.',
+        'parameters' => array(
+            'type' => 'object',
+            'properties' => array(
+                'query' => array(
+                    'type' => 'string',
+                    'description' => 'Suchbegriffe auf Deutsch',
+                ),
+            ),
+            'required' => array('query'),
+            'additionalProperties' => false,
+        ),
+        'strict' => true,
+    );
+}
+
+function kdcb_chat_get_page_tool_schema()
+{
+    return array(
+        'type' => 'function',
+        'name' => 'get_page',
+        'description' => 'Lade den vollständigen Inhalt einer K&D-Webseite. Verwende eine URL aus den search_website-Ergebnissen oder aus dem Kontext.',
+        'parameters' => array(
+            'type' => 'object',
+            'properties' => array(
+                'url' => array(
+                    'type' => 'string',
+                    'description' => 'URL der Seite',
+                ),
+            ),
+            'required' => array('url'),
+            'additionalProperties' => false,
+        ),
+        'strict' => true,
+    );
 }
 
 function kdcb_chat_behavior_pack()
@@ -321,6 +661,30 @@ function kdcb_chat_behavior_pack()
     );
 
     return implode("\n", $lines);
+}
+
+function kdcb_chat_strip_language_instructions($text)
+{
+    $text = (string) $text;
+    if ($text === '') {
+        return '';
+    }
+
+    $patterns = array(
+        // English
+        '/\b(answer|respond|reply)\b.{0,24}\b(in)\s+(english|german|spanish|french|italian)\b[^.?!\n]*[.?!]?/iu',
+        '/\b(in)\s+(english|spanish|french|italian)\b\s*(please)?\s*$/iu',
+        // German
+        '/\b(antworte|antworten|bitte)\b.{0,24}\b(auf|in)\s+(englisch|deutsch|spanisch|französisch|franzoesisch|italienisch)\b[^.?!\n]*[.?!]?/iu',
+        '/\b(auf|in)\s+(englisch|spanisch|französisch|franzoesisch|italienisch)\b\s*(bitte)?\s*$/iu',
+        // Spanish/French short forms
+        '/\b(responde|respuesta)\b.{0,24}\b(en)\s+(español|espanol|francés|frances|inglés|ingles)\b[^.?!\n]*[.?!]?/iu',
+        '/\b(réponds|reponds)\b.{0,24}\b(en)\s+(français|francais|anglais)\b[^.?!\n]*[.?!]?/iu',
+    );
+
+    $clean = preg_replace($patterns, ' ', $text);
+    $clean = preg_replace('/\s{2,}/u', ' ', (string) $clean);
+    return trim((string) $clean);
 }
 
 function kdcb_chat_compact_faq_context($faq_raw, $max_items)
@@ -353,15 +717,10 @@ function kdcb_chat_is_reputation_sensitive($message)
         'geruecht',
         'vorwurf',
         'beschuldigung',
-        'rausschmeiß',
-        'rausschmeiss',
-        'rausgeworfen',
-        'rauswerfen',
         'schikaniert',
         'schikane',
         'betrug',
         'abzocke',
-        'illegal',
         'skandal',
         'lüge',
         'luege',
@@ -371,6 +730,20 @@ function kdcb_chat_is_reputation_sensitive($message)
         if (strpos($message, $keyword) !== false) {
             return true;
         }
+    }
+
+    // "Ich habe gehört dass..." + negative context about the company.
+    if (preg_match('/\b(gehört|gehoert|angeblich|man\s+sagt|man\s+hört)\b/iu', $message)
+        && preg_match('/\b(probleme|schlecht|schlimm|unseriös|unserioees|ärger|aerger|beschwer|negativ|rauswerf|rausschmei(ss|ß))\b/iu', $message)
+    ) {
+        return true;
+    }
+
+    // "rauswerfen/illegal" only reputation-sensitive when about the company (not user's own situation).
+    if (preg_match('/\b(rauswerf\w*|rausgeschmissen|rausschmei(ss|ß)\w*|illegal)\b/iu', $message)
+        && preg_match('/\b(bei\s+euch|bei\s+ihnen|ihr\b|kirsch|drechsler|k\s*&\s*d|kud)\b/iu', $message)
+    ) {
+        return true;
     }
 
     return false;
@@ -392,7 +765,7 @@ function kdcb_chat_wants_long_output($message)
     ));
 }
 
-function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw, $latest_user_message)
+function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw, $latest_user_message, $use_search_tool = false)
 {
     $admin_system = trim((string) kdcb_get_option('system_instructions', kdcb_default_options()['kdcb_system_instructions']));
     $context_pack = trim((string) kdcb_get_option('context_pack', kdcb_default_options()['kdcb_context_pack']));
@@ -408,25 +781,30 @@ function kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw, $la
         'Klinge wie ein erfahrener Mitarbeiter im direkten Kundendialog, nicht wie ein Suchassistent.',
         'Antworte aus Unternehmenssicht mit klaren Aussagen statt vorsichtiger Vermutungen.',
         'Nutze strikt nur den bereitgestellten Kontext und erfinde keine Fakten.',
-        'Kontext-Priorität: 1) CURRENT_PAGE (hoch), 2) WP_SEARCH (mittel), 3) FAQ_MATCHES (niedrig).',
+        $use_search_tool
+            ? 'Du hast zwei Werkzeuge: search_website (findet Seiten) und get_page (lädt vollständigen Seiteninhalt). Wenn CURRENT_PAGE und FAQ die Frage nicht beantworten: erst search_website nutzen, dann get_page für die relevanteste Seite aufrufen. Antworte erst, wenn du den Seiteninhalt geladen hast.'
+            : 'Kontext-Priorität: 1) CURRENT_PAGE (hoch), 2) WP_SEARCH (mittel), 3) FAQ_MATCHES (niedrig).',
         'Semantik-Regel: Interpretiere umgangssprachliche Begriffe (z. B. "Boss", "Chef") direkt als Frage nach Geschäftsführung/Leitung.',
         'Erkläre diese Interpretation nicht im Antworttext, sondern gib direkt die inhaltliche Antwort.',
-        'Wenn nach einem Überblick (z. B. "Leistungen") gefragt wird, kombiniere CURRENT_PAGE mit relevanten WP_SEARCH-Treffern.',
+        $use_search_tool
+            ? 'Geladene Seiteninhalte (via get_page) sind verbindliche, aktuelle Website-Information. Antworte daraus konkret und nenne gefundene Inhalte beim Namen (z. B. Jobtitel, Leistungen, Projekte). Was auf der Website steht, ist offizielle Auskunft.'
+            : 'Wenn nach einem Überblick (z. B. "Leistungen") gefragt wird, kombiniere CURRENT_PAGE mit relevanten WP_SEARCH-Treffern.',
         'Bei Bereichsfragen (z. B. Leistungen, Jobs, Kontakt) antworte AI-basiert mit kurzer Übersicht und füge, falls im Kontext vorhanden, genau einen passenden Markdown-Link ein.',
         'Wenn im Kontext eine thematisch passende Seite (z. B. Jobs/Karriere/Leistungen) vorhanden ist, behandle sie als belastbare Information und nenne sie nicht als \"nicht vorhanden\".',
         'Vermeide Formulierungen wie "unter /leistungen zu finden"; liefere stattdessen direkt die Antwort plus Link.',
-        'Wenn Informationen fehlen oder uneindeutig sind, nenne knapp den Stand aus Unternehmenssicht und biete einen konkreten nächsten Schritt an.',
+        'Wenn der Nutzer einen Mangel/Schaden beschreibt: gib 3 kurze Sofortmaßnahmen (Bulletpoints) und nenne danach als Option den Button „Mängel melden“ für die offizielle Meldung.',
+        'Wichtig zu Mängeln: Der Chat ist kein Ticket-System. Chat-Nachrichten werden nicht dauerhaft gespeichert und nicht als offizielle Mängelmeldung verarbeitet.',
+        'Für eine offizielle Mängelmeldung: verweise auf den Button „Mängel melden“ und frage im Chat nicht nach Name, Adresse, Objektadresse, E-Mail oder Telefonnummer.',
+        'Wenn der Nutzer ausdrücklich kein Formular möchte: gib trotzdem Sofortmaßnahmen, aber nimm die Meldung nicht "im Chat" entgegen und sammle keine Kontaktdaten.',
+        'Wenn du etwas nicht nennen kannst (z. B. Gehalt, Adresse, Preis): formuliere es selbstverständlich aus Mitarbeitersicht, z. B. "Das können wir Ihnen hier im Chat nicht nennen – melden Sie sich gern direkt bei uns." NIEMALS "in den vorliegenden Informationen nicht angegeben/enthalten/aufgeführt" oder "ist hier nicht hinterlegt/ausgewiesen".',
         'Sicherheitsregel: Frage nicht aktiv nach sensiblen persönlichen Daten.',
-        'Schreibstil: antworte direkt auf die Frage ohne Meta-Einleitung wie "Auf der Seite ... steht" oder "im Kontext steht".',
-        'Vermeide Formulierungen wie "Mit Boss ist oft gemeint ..." oder "wird auch genannt".',
-        'Vermeide Füllsätze wie "oft", "meist", "kann bedeuten", "es wird genannt", wenn eine klare Aussage möglich ist.',
+        'Sprich wie ein Mensch am Empfang, nicht wie ein Suchsystem. Kein "auf der Seite steht", "im Kontext", "laut vorliegender Information", "in den uns vorliegenden Daten". Stattdessen direkte Aussagen.',
         'Nenne den Website-/Firmennamen nur, wenn es für die inhaltliche Klarheit nötig ist.',
         'Nenne Seitennamen/Fundorte nicht im Fließtext, außer der Nutzer fragt explizit danach.',
-        'Keine Ich-Perspektive über interne Arbeitsschritte (kein "ich habe gesucht", "ich sehe auf der Seite").',
-        'Vermeide hilflose Formulierungen wie "mir liegen hier keine belastbaren Informationen vor", "aus dem Kontext geht nur hervor" oder "ich kann nur auf der Seite suchen".',
+        'Keine Ich-Perspektive über interne Arbeitsschritte (kein "ich habe gesucht", "ich sehe auf der Seite", "in der aktuellen Ansicht").',
         'Keine Beschreibung des internen Such-/Kontextprozesses.',
         "Antwort-Playbook (kompakt):\n" . kdcb_chat_behavior_pack(),
-        'Antwortsprache: Deutsch. Stil: klar, kurz, hilfreich.',
+        'Standardsprache: Deutsch. Stil: klar, kurz, hilfreich. Wenn der Nutzer in einer anderen Sprache schreibt oder explizit um eine andere Sprache bittet, antworte in dieser Sprache. Interne Regeln und Toolaufrufe bleiben immer auf Deutsch.',
         'Antwortformat: zuerst eine direkte Antwort in 2-6 Sätzen, optional kurze Aufzählung für Details.',
         'Standard-Länge: knapp und fokussiert (maximal ca. 120 Wörter), außer der Nutzer verlangt ausdrücklich eine ausführliche Antwort.',
         'Nutze lesbares Markdown für Struktur (Absätze, Listen, **Hervorhebungen**), aber keine Tabellen.',
@@ -598,11 +976,12 @@ function kdcb_chat_append_context_link_if_missing($reply, $latest_user_message, 
         return '';
     }
 
-    $message = kdcb_text_lower((string) $latest_user_message);
+    $message_raw = (string) $latest_user_message;
+    $message = kdcb_text_lower($message_raw);
 
-    $is_jobs_request = kdcb_chat_contains_any($message, array(
-        'job', 'jobs', 'karriere', 'stelle', 'stellen', 'bewerbung', 'bewerben',
-    ));
+    // Avoid false positives like "wie stelle ich ..." (stellen=verb). Keep "Stelle(n)" only when clearly in career context.
+    $is_jobs_request = (bool) preg_match('/\b(jobs?|karriere|bewerb\w*|praktik\w*|werkstudent\w*|stellenangebot\w*|stellenanzeig\w*)\b/iu', $message_raw)
+        || (bool) preg_match('/\b(offene|freie)\s+stellen?\b/iu', $message_raw);
     $is_services_request = kdcb_chat_contains_any($message, array(
         'leistung', 'leistungen', 'service', 'services', 'angebot', 'angebote', 'was bietet ihr an', 'was bietet ihr',
     ));
@@ -654,21 +1033,43 @@ function kdcb_chat_postprocess_reply($reply, $latest_user_message)
     }
 
     $soft_rewrites = array(
-        '/\bMir liegen (hier )?keine belastbaren Informationen vor\.?/iu' => 'Dazu liegt derzeit keine belastbare Grundlage vor.',
-        '/\bAus dem verfügbaren Kontext geht nur hervor, dass\b/iu' => 'Aktuell gilt:',
-        '/\bim bereitgestellten Kontext\b/iu' => 'derzeit',
-        '/\bMit\s+[„"\'`]?(Boss|Chef)[”"\'`]?\s+ist\s+(oft|meist|in der regel)\s+gemeint[^\.!\n]*[\.!\n]?/iu' => '',
-        '/\bMit\s+[„"\'`]?(Boss|Chef)[”"\'`]?\s+ist[^\.!\n]*(gemeint|bezeichnet)[^\.!\n]*[\.!\n]?/iu' => '',
-        '/\bAuf\s+der\s+(aktuellen|dieser)\s+Seite\s+wird\s+nicht\s+genannt[^\.!\n]*[\.!\n]?/iu' => 'Dafür gibt es aktuell keine belastbare Grundlage. ',
+        // ── "Search assistant" speak → natural employee speak ──
+        // "in den (uns) vorliegenden/verfügbaren Informationen nicht angegeben/enthalten"
+        '/\bin\s+den\s+(uns\s+)?(vorliegenden|verfügbaren|aktuell\s+verfügbaren|aktuell\s+vorliegenden)\s+(Informationen|Daten|Unterlagen)\s+[^\.!\n]{0,80}(angegeben|enthalten|aufgeführt|hinterlegt|ausgewiesen|genannt|ersichtlich)[^\.!\n]*[\.!\n]?/iu'
+            => '',
+        // "ist ... nicht angegeben" or "nicht angegeben/ausgewiesen ist" (any word order)
+        '/\bist\s+(hier\s+|dort\s+|aktuell\s+|derzeit\s+|in\s+dieser\s+Ansicht\s+)?(leider\s+)?(nicht|kein\w*)\s+(angegeben|hinterlegt|ausgewiesen|aufgeführt|ersichtlich|vermerkt|verfügbar)/iu'
+            => 'können wir Ihnen hier im Chat nicht nennen',
+        '/\bnicht\s+(öffentlich\s+)?(angegeben|hinterlegt|ausgewiesen|aufgeführt|ersichtlich|vermerkt)\s+(ist|wird|war)\b/iu'
+            => 'können wir hier im Chat nicht nennen',
+        // trailing "weil/da ... nicht ausgewiesen/angegeben ist" clauses
+        '/,?\s*(weil|da)\s+[^\.!\n]{0,80}(nicht\s+)?(angegeben|hinterlegt|ausgewiesen|aufgeführt|ersichtlich)\s+(ist|wird|war)[^\.!\n]*[\.!\n]?/iu'
+            => '.',
+        // "laut vorliegender Information" / "laut den uns vorliegenden"
+        '/\blaut\s+(vorliegender|den\s+uns\s+vorliegenden)\s+(Information\w*|Daten|Unterlagen)/iu' => 'nach aktuellem Stand',
+        // "in der aktuellen Ansicht / in der uns vorliegenden Übersicht"
+        '/\bin\s+der\s+(aktuellen|uns\s+vorliegenden)\s+(Ansicht|Übersicht|Uebersicht|Darstellung)/iu' => 'hier im Chat',
+        // "im bereitgestellten Kontext"
+        '/\bim\s+bereitgestellten\s+Kontext\b/iu' => 'derzeit',
+        // "aus dem verfügbaren Kontext geht hervor"
+        '/\bAus\s+dem\s+verfügbaren\s+Kontext\s+geht\s+(nur\s+)?hervor,?\s+(dass\s+)?/iu' => '',
+        // "mir liegen (hier) keine belastbaren Informationen vor"
+        '/\b(Mir|uns)\s+liegen\s+(hier\s+)?(dazu\s+)?(keine|nicht)\s+[^\.!\n]{0,40}(Informationen|Angaben|Daten)\s+vor[^\.!\n]*[\.!\n]?/iu'
+            => 'Das können wir Ihnen hier im Chat nicht im Detail beantworten.',
+        // "Auf der (aktuellen/dieser/unserer) Seite" references
+        '/\bAuf\s+der\s+(aktuellen|dieser)\s+Seite\b[^\.!\n]*(nicht\s+genannt|nicht\s+aufgeführt|nicht\s+angegeben)[^\.!\n]*[\.!\n]?/iu'
+            => 'Das können wir Ihnen hier im Chat leider nicht nennen.',
         '/\bAuf\s+(unserer|der)\s+[^\.!\n]{0,80}Seite\s+wird\s+außerdem\s+/iu' => 'Außerdem ',
-        '/\bAuf\s+(unserer|der)\s+[^\.!\n]{0,80}Seite\s+wird\s+/iu' => '',
-        '/\bAuf\s+(unserer|der)\s+[^\.!\n]{0,80}Seite\s+ist\s+/iu' => '',
-        '/\bDafür fehlt mir im bereitgestellten Kontext[^\.!\n]*[\.!\n]?/iu' => 'Dafür gibt es aktuell keine belastbare Grundlage. ',
-        '/\bNach unserem Kenntnisstand liegt dafür keine belastbare Grundlage vor\.?/iu' => 'Dafür gibt es aktuell keine belastbare Grundlage.',
-        '/\bDafür liegt keine belastbare Grundlage vor\.?/iu' => 'Dafür gibt es aktuell keine belastbare Grundlage.',
-        '/\bich habe (hier )?(nur )?(im|auf der)\s+[^\.!\n]*gesucht[^\.!\n]*[\.!\n]?/iu' => '',
-        '/\bich kann (hier )?nur auf der seite suchen[^\.!\n]*[\.!\n]?/iu' => '',
+        '/\bAuf\s+(unserer|der)\s+[^\.!\n]{0,80}Seite\s+(wird|ist|steht|finden Sie)\s+/iu' => '',
+        // "ich habe gesucht / ich sehe auf der Seite"
+        '/\bich habe\s+(hier\s+)?(nur\s+)?(im|auf der)\s+[^\.!\n]*gesucht[^\.!\n]*[\.!\n]?/iu' => '',
+        '/\bich kann\s+(hier\s+)?nur auf der seite suchen[^\.!\n]*[\.!\n]?/iu' => '',
+        // "Boss/Chef" explanation
+        '/\bMit\s+[„"\'`]?(Boss|Chef)[""\'`]?\s+ist[^\.!\n]*(gemeint|bezeichnet|oft\s+gemeint)[^\.!\n]*[\.!\n]?/iu' => '',
         '/\bwird auch genannt\b/iu' => 'heißt',
+        // ── Defect channel boundary ──
+        '/\bwir\s+nehmen\s+(Ihre\s+)?[^\.!\n]{0,80}meldung\s+(auch\s+)?ohne\s+formular\s+entgegen\.?/iu' =>
+            'Für eine offizielle Meldung nutzen Sie bitte den Button **„Mängel melden"**.',
     );
 
     foreach ($soft_rewrites as $pattern => $replacement) {
@@ -676,6 +1077,12 @@ function kdcb_chat_postprocess_reply($reply, $latest_user_message)
     }
 
     $reply = kdcb_chat_strip_markdown_tables($reply);
+
+    if (kdcb_chat_is_legal_sensitive($latest_user_message)) {
+        if (!preg_match('/\bkeine\s+Rechtsberatung\b/iu', $reply)) {
+            $reply = "Wir können keine Rechtsberatung leisten.\n\n" . ltrim($reply);
+        }
+    }
 
     if (kdcb_chat_is_reputation_sensitive($latest_user_message)) {
         if (!preg_match('/Diesen Vorwurf können wir so nicht bestätigen\./iu', $reply)) {
@@ -686,6 +1093,65 @@ function kdcb_chat_postprocess_reply($reply, $latest_user_message)
     $reply = preg_replace('/\R{3,}/u', "\n\n", trim($reply));
 
     return trim((string) $reply);
+}
+
+function kdcb_chat_build_slim_context($page_url, $latest_message, $faq_raw)
+{
+    $query_terms = kdcb_rag_query_terms($latest_message);
+    $query_terms = kdcb_rag_expand_query_terms($latest_message, $query_terms);
+
+    $context = array(
+        'current_page' => null,
+        'faq_results' => array(),
+        'sources' => array(),
+        'context_text' => '',
+    );
+
+    $current_page = kdcb_rag_resolve_page($page_url);
+    if (is_array($current_page)) {
+        $current_page['focus_snippet'] = kdcb_rag_make_focus_snippet(
+            $current_page['content'],
+            $query_terms,
+            900
+        );
+        $context['current_page'] = $current_page;
+        $context['sources'][] = array(
+            'title' => $current_page['title'],
+            'url' => $current_page['url'],
+        );
+    }
+
+    $faq_results = kdcb_rag_match_faq($latest_message, $faq_raw, 2);
+    $context['faq_results'] = $faq_results;
+
+    if (!empty($faq_results)) {
+        $context['sources'][] = array(
+            'title' => 'K&D FAQ',
+            'url' => site_url('/'),
+        );
+    }
+
+    $chunks = array();
+
+    if (!empty($context['current_page'])) {
+        $page = $context['current_page'];
+        $excerpt = !empty($page['focus_snippet']) ? $page['focus_snippet'] : $page['content'];
+        $chunks[] = "[CURRENT_PAGE | PRIORITY: HIGH]\nTitel: " . $page['title']
+            . "\nURL: " . $page['url']
+            . "\nRelevanter Auszug: " . $excerpt;
+    }
+
+    if (!empty($faq_results)) {
+        $faq_chunks = array();
+        foreach ($faq_results as $faq) {
+            $faq_chunks[] = "Q: " . $faq['question'] . "\nA: " . $faq['answer'];
+        }
+        $chunks[] = "[FAQ_MATCHES]\n" . implode("\n\n", $faq_chunks);
+    }
+
+    $context['context_text'] = implode("\n\n", $chunks);
+
+    return $context;
 }
 
 function kdcb_rest_chat_handler($request)
@@ -808,40 +1274,209 @@ function kdcb_rest_chat_handler($request)
         ), 200);
     }
 
+    if (kdcb_chat_is_wrongdoing_instruction_request($latest_user_message)) {
+        return new WP_REST_Response(array(
+            'reply' => kdcb_chat_wrongdoing_reply(),
+            'sources' => array(),
+            'action' => null,
+        ), 200);
+    }
+
+    if (kdcb_chat_is_beyond_scope_request($latest_user_message)) {
+        return new WP_REST_Response(array(
+            'reply' => kdcb_chat_beyond_scope_reply(),
+            'sources' => array(),
+            'action' => null,
+        ), 200);
+    }
+
     $faq_raw = (string) kdcb_get_option('faq_raw', '');
-    $context = kdcb_rag_build_context($page_url, $latest_user_message, $faq_raw);
-    $context_text = kdcb_rag_context_to_text($context);
+    $latest_user_message_for_rag = kdcb_chat_strip_language_instructions($latest_user_message);
+    if ($latest_user_message_for_rag === '') {
+        $latest_user_message_for_rag = $latest_user_message;
+    }
+
+    $slim = kdcb_chat_build_slim_context($page_url, $latest_user_message_for_rag, $faq_raw);
+    $context_text = $slim['context_text'];
+    $exclude_post_id = is_array($slim['current_page']) ? (int) $slim['current_page']['post_id'] : 0;
+
+    $tool_sources = array();
+
+    $tool_handler = function ($name, $arguments) use ($exclude_post_id, &$tool_sources) {
+        // ── search_website: discovery (find pages) ──
+        if ($name === 'search_website') {
+            $query = isset($arguments['query']) ? trim((string) $arguments['query']) : '';
+            if ($query === '') {
+                return 'Keine Suchbegriffe angegeben.';
+            }
+
+            $primary_results = kdcb_rag_search_posts($query, $exclude_post_id);
+
+            $query_terms = kdcb_rag_query_terms($query);
+            $intent_query = kdcb_rag_build_intent_query($query, $query_terms);
+            $intent_results = array();
+            if ($intent_query !== '' && kdcb_text_lower($intent_query) !== kdcb_text_lower($query)) {
+                $intent_results = kdcb_rag_search_posts($intent_query, $exclude_post_id);
+            }
+
+            $expanded_terms = kdcb_rag_expand_query_terms($query, $query_terms);
+            $all_results = kdcb_rag_rank_search_results(
+                array_merge($primary_results, $intent_results),
+                $expanded_terms,
+                5
+            );
+            $all_results = kdcb_rag_inject_intent_boost_results($query, $expanded_terms, $all_results);
+            $all_results = kdcb_rag_rank_search_results($all_results, $expanded_terms, 5);
+
+            // Find related pages by slug prefix (e.g. "job" → "job-weg-administrator").
+            $seen_urls = array();
+            foreach ($all_results as $item) {
+                if (!empty($item['url'])) {
+                    $seen_urls[$item['url']] = true;
+                }
+            }
+            foreach ($all_results as $item) {
+                if (empty($item['url'])) {
+                    continue;
+                }
+                $path = trim((string) wp_parse_url($item['url'], PHP_URL_PATH), '/');
+                $slug = sanitize_title(wp_basename($path));
+                if (strlen($slug) < 2 || strlen($slug) > 14) {
+                    continue;
+                }
+                global $wpdb;
+                $like_pattern = $wpdb->esc_like($slug) . '-%';
+                $related_posts = $wpdb->get_results($wpdb->prepare(
+                    "SELECT ID FROM {$wpdb->posts} WHERE post_type IN ('page','post') AND post_status = 'publish' AND post_name LIKE %s LIMIT 4",
+                    $like_pattern
+                ));
+                if (!is_array($related_posts)) {
+                    continue;
+                }
+                foreach ($related_posts as $rp) {
+                    $rp_url = get_permalink((int) $rp->ID);
+                    if (!$rp_url || isset($seen_urls[$rp_url])) {
+                        continue;
+                    }
+                    $rp_post = get_post((int) $rp->ID);
+                    if (!$rp_post instanceof WP_Post) {
+                        continue;
+                    }
+                    $all_results[] = array(
+                        'title' => get_the_title($rp_post),
+                        'url' => $rp_url,
+                        'snippet' => kdcb_rag_extract_post_text($rp_post, 200),
+                    );
+                    $seen_urls[$rp_url] = true;
+                }
+            }
+
+            if (empty($all_results)) {
+                return 'Keine Treffer für "' . $query . '".';
+            }
+
+            foreach ($all_results as $item) {
+                if (!empty($item['url']) && !empty($item['title'])) {
+                    $tool_sources[] = array('title' => $item['title'], 'url' => $item['url']);
+                }
+            }
+
+            $lines = array();
+            foreach (array_slice($all_results, 0, 6) as $item) {
+                $snippet = kdcb_text_substr(isset($item['snippet']) ? (string) $item['snippet'] : '', 200);
+                $lines[] = '- ' . $item['title'] . ' | ' . $item['url'] . "\n  " . $snippet;
+            }
+            return implode("\n", $lines);
+        }
+
+        // ── get_page: read full page content ──
+        if ($name === 'get_page') {
+            $url = isset($arguments['url']) ? trim((string) $arguments['url']) : '';
+            if ($url === '') {
+                return 'Keine URL angegeben.';
+            }
+
+            $page = kdcb_rag_resolve_page($url);
+            if (!is_array($page)) {
+                return 'Seite nicht gefunden: ' . $url;
+            }
+
+            $tool_sources[] = array('title' => $page['title'], 'url' => $page['url']);
+
+            $post = get_post((int) $page['post_id']);
+            $content = ($post instanceof WP_Post) ? kdcb_rag_extract_post_text($post, 3000) : $page['content'];
+
+            return $page['title'] . "\nURL: " . $page['url'] . "\n\n" . $content;
+        }
+
+        return 'Unbekanntes Tool.';
+    };
 
     $openai_messages = array(
         array(
             'role' => 'system',
-            'content' => kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw, $latest_user_message),
+            'content' => kdcb_chat_build_system_prompt($context_text, $page_title, $faq_raw, $latest_user_message, true),
         ),
     );
 
     foreach ($clean_messages as $message) {
-        $openai_messages[] = $message;
+        $role = isset($message['role']) ? (string) $message['role'] : '';
+        $content = isset($message['content']) ? (string) $message['content'] : '';
+        if ($role !== 'user' && $role !== 'assistant') {
+            continue;
+        }
+
+        $openai_messages[] = array(
+            'role' => $role,
+            'content' => $content,
+        );
     }
 
-    $reply = kdcb_openai_create_response($openai_messages, array(
+    $result = kdcb_openai_create_response($openai_messages, array(
         'max_output_tokens' => kdcb_chat_wants_long_output($latest_user_message) ? 1600 : 420,
+        'tools' => array(kdcb_chat_search_tool_schema(), kdcb_chat_get_page_tool_schema()),
+        'tool_handler' => $tool_handler,
     ));
 
-    if (is_wp_error($reply)) {
-        error_log('KDCB chat generation failed: ' . $reply->get_error_code());
+    $usage = null;
+
+    if (is_wp_error($result)) {
+        error_log('KDCB chat generation failed: ' . $result->get_error_code());
         $reply = 'Ich kann gerade keine zuverlässige Antwort erzeugen. Bitte nutzen Sie das Mängelformular oder kontaktieren Sie K&D direkt.';
     } else {
-        $reply = kdcb_chat_postprocess_reply($reply, $latest_user_message);
+        $reply = kdcb_chat_postprocess_reply($result['text'], $latest_user_message);
         $reply = kdcb_chat_append_context_link_if_missing(
             $reply,
             $latest_user_message,
-            isset($context['sources']) ? (array) $context['sources'] : array()
+            $slim['sources']
         );
+        $usage = $result['usage'];
+        kdcb_log_token_usage($usage);
+    }
+
+    // Merge tool-found sources into response pills.
+    if (!empty($tool_sources)) {
+        $existing_urls = array();
+        foreach ($slim['sources'] as $s) {
+            if (!empty($s['url'])) {
+                $existing_urls[$s['url']] = true;
+            }
+        }
+        foreach ($tool_sources as $s) {
+            if (!empty($s['url']) && !isset($existing_urls[$s['url']])) {
+                $slim['sources'][] = array(
+                    'title' => (string) $s['title'],
+                    'url' => esc_url_raw((string) $s['url']),
+                );
+                $existing_urls[$s['url']] = true;
+            }
+        }
     }
 
     return new WP_REST_Response(array(
         'reply' => (string) $reply,
-        'sources' => isset($context['sources']) ? $context['sources'] : array(),
+        'sources' => $slim['sources'],
         'action' => null,
+        'usage' => $usage,
     ), 200);
 }

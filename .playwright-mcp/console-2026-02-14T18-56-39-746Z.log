@@ -1,0 +1,6 @@
+[    2403ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8881/image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==:0
+[ 1126669ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8881/image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==:0
+[ 1170174ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:8881/wp-json/kdcb/v1/submit_defect:0
+[ 8002379ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8881/image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==:0
+[10004828ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8881/image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==:0
+[10140808ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8881/image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==:0
